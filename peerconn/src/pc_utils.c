@@ -1,0 +1,129 @@
+/*******************************************************************************
+*                                                                              *
+*                 Copyright (C) 2014, MindBricks Technologies                  *
+*                  Rajmohan Banavi (rajmohan@mindbricks.com)                   *
+*                     MindBricks Confidential Proprietary.                     *
+*                            All Rights Reserved.                              *
+*                                                                              *
+********************************************************************************
+*                                                                              *
+* This document contains information that is confidential and proprietary to   *
+* MindBricks Technologies. No part of this document may be reproduced in any   *
+* form whatsoever without prior written approval from MindBricks Technologies. *
+*                                                                              *
+*******************************************************************************/
+
+#include <stdint.h>
+#include <stdlib.h>
+
+/* openssl */
+#include <openssl/bio.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
+/* ice */
+#include <stun_base.h>
+#include <stun_enc_dec_api.h>
+#include <ice_api.h>
+
+/* srtp */
+#include <srtp/err.h>
+#include <srtp/srtp.h>
+
+#include <mb_types.h>
+#include <pc.h>
+#include <pc_int.h>
+
+
+extern pc_instance_t g_pc;
+
+
+mb_status_t pc_utils_process_ice_msg(pc_ctxt_t *ctxt, pc_rcvd_data_t *msg) {
+
+    handle stun_msg;
+    ice_rx_stun_pkt_t pkt;
+    int32_t ice_status;
+
+    ice_status = ice_instance_verify_valid_stun_packet(msg->buf, msg->buf_len);
+    if(ice_status == STUN_MSG_NOT) return MB_INVALID_PARAMS;
+
+    ice_status = stun_msg_decode(msg->buf, msg->buf_len, false, &stun_msg); 
+    if (ice_status != STUN_OK) {
+
+        MB_LOG(MBLOG_ERROR, 
+                "stun_msg_decode() returned error: %d\n", ice_status);
+        return MB_INT_ERROR;
+    }
+
+    /* TODO; hard code here of the received from address */
+    pkt.h_msg = stun_msg;
+    pkt.transport_param = msg->transport_param;
+    memcpy(&pkt.src, &msg->src, sizeof(mb_inet_addr_t));
+
+    ice_status = ice_session_inject_received_msg(
+            g_pc.ice_instance, ctxt->ice_session, &pkt);
+    if (ice_status != STUN_OK) {
+
+        printf("ice_session_inject_received_msg() "\
+                            "returned error: %d\n", ice_status);
+        return MB_INT_ERROR;
+    }
+
+    return MB_OK;
+}
+
+
+
+mb_status_t pc_utils_make_udp_transport_connected(pc_ctxt_t *ctxt) {
+
+    int ret;
+    int32_t ice_status;
+    stun_inet_addr_t *peer;
+    struct sockaddr_in dest;
+    ice_session_valid_pairs_t selected_pair;
+
+    memset(&dest, 0, sizeof(dest));
+
+    /* 
+     * get the ice nominated pairs, so that we can connect the udp socket to 
+     * the nominated dest address. This is required for dtls datagram BIO 
+     * during handshake and I/O communication.
+     */
+    /* TODO; 
+     * This will work for only one media and one nominated pair per peer 
+     * connection context. Scaling to support multiple media and components?
+     */
+    ice_status = ice_session_get_nominated_pairs(
+            g_pc.ice_instance, ctxt->ice_session, &selected_pair);
+    if (ice_status != STUN_OK) {
+        fprintf(stderr, "Error while retrieving ICE nominated candidate "\
+                "pair from ICE library. Returned ice status: %d\n", ice_status);
+        return MB_INT_ERROR;
+    }
+
+    /* TODO; as above */
+    peer = &selected_pair.media_list[0].pairs[0].peer;
+    printf("Nominated Destination pair: %s and %d\n", peer->ip_addr, peer->port);
+
+    dest.sin_family = AF_INET; /* TODO; hard code */
+    dest.sin_port = peer->port;
+    ret  = inet_pton(AF_INET, (char *)peer->ip_addr, &dest.sin_addr);
+    if (ret != 1) {
+        perror("inet_pton:");
+        ICE_LOG (LOG_SEV_ERROR, 
+                "%s: inet_pton() failed %d\n", peer->ip_addr, ret);
+        return MB_INT_ERROR;
+    }
+
+    if (connect(ctxt->sock_fd, (struct sockaddr *)&dest, sizeof(dest)) == -1) {
+        perror("Connect ");
+        fprintf(stderr, "Making the UDP socket connected failed\n");
+        return MB_INT_ERROR;
+    }
+
+    return MB_OK;
+}
+
+
+
+/******************************************************************************/

@@ -1,0 +1,436 @@
+/*******************************************************************************
+*                                                                              *
+*                 Copyright (C) 2014, MindBricks Technologies                  *
+*                  Rajmohan Banavi (rajmohan@mindbricks.com)                   *
+*                     MindBricks Confidential Proprietary.                     *
+*                            All Rights Reserved.                              *
+*                                                                              *
+********************************************************************************
+*                                                                              *
+* This document contains information that is confidential and proprietary to   *
+* MindBricks Technologies. No part of this document may be reproduced in any   *
+* form whatsoever without prior written approval from MindBricks Technologies. *
+*                                                                              *
+*******************************************************************************/
+
+#include <stdint.h>
+#include <stdlib.h>
+
+/* ice */
+#include <stun_base.h>
+#include <ice_api.h>
+
+#include <mb_types.h>
+
+#include <dtls_srtp.h>
+
+#include <pc.h>
+#include <pc_int.h>
+
+/* global pc instance */
+pc_instance_t g_pc;
+static pc_ice_candidates_cb pc_ice_cb;
+
+
+static char *ice_states[] =
+{
+    "ICE_GATHERED",
+    "ICE_CC_RUNNING",
+    "ICE_CC_COMPLETED",
+    "ICE_CC_FAILED",
+};
+
+
+
+static int32_t pc_nwk_send_msg (u_char *buf, uint32_t buf_len, 
+                    stun_inet_addr_type_t ip_addr_type, u_char *ip_addr, 
+                    uint32_t port, handle param)
+{
+    int sent_bytes = 0;
+    int sock_fd = (int) param;
+
+    if (ip_addr_type == STUN_INET_ADDR_IPV4)
+    {
+        sent_bytes = platform_socket_sendto(sock_fd, buf, 
+                            buf_len, 0, AF_INET, port, (char *)ip_addr);
+    }
+    else if (ip_addr_type == STUN_INET_ADDR_IPV6)
+    {
+        sent_bytes = platform_socket_sendto(sock_fd, buf, 
+                            buf_len, 0, AF_INET6, port, (char *)ip_addr);
+    }
+    else
+    {
+        MB_LOG (LOG_SEV_INFO,
+                "[ICE AGENT DEMO] Invalid IP address family type. "\
+                "Sending of STUN message failed");
+    }
+
+    return sent_bytes;
+}
+
+
+static void pc_timer_expiry_cb (void *timer_id, void *arg)
+{
+    static int32_t timer_fd = 0;
+    pc_timer_event_t timer_event;
+    struct sockaddr_in dest;
+    uint32_t bytes;
+
+    platform_memset((char *) &dest, 0, sizeof(dest));
+
+    MB_LOG (MBLOG_DEBUG,
+            "[PC] in peerconn timer callback %d %p", timer_id, arg);
+
+    if (timer_fd == 0)
+    {
+        timer_fd = socket(AF_INET, SOCK_DGRAM, 0);
+        if(timer_fd == -1)
+        {
+            MB_LOG(MBLOG_CRITICAL, "[PC] Timer event socket creation failed");
+            return;
+        }
+    }
+
+    timer_event.timer_id = timer_id;
+    timer_event.arg = arg;
+
+
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(PC_TIMER_PORT);
+    bytes = inet_pton(AF_INET, "127.0.0.1", &dest.sin_addr);
+    if (bytes != 1) {
+        perror("inet_pton:");
+        MB_LOG (MBLOG_CRITICAL, 
+                "%s: inet_pton() failed %d\n", dest, bytes);
+        return;
+    }
+
+    bytes = sendto(timer_fd, (void *)&timer_event, 
+            sizeof(timer_event), 0, (struct sockaddr *)&dest, sizeof(dest));
+    if (bytes == -1)
+    {
+        perror("sendto:");
+        MB_LOG(MBLOG_ERROR, "[PC] Sending of timer expiry message failed\n");
+    }
+    
+    return;
+}
+
+
+
+static handle pc_start_timer (uint32_t duration, handle arg)
+{
+    timer_expiry_callback timer_cb = pc_timer_expiry_cb;
+
+    return platform_start_timer(duration, timer_cb, arg);
+}
+
+
+static int32_t pc_stop_timer (handle timer_id)
+{
+    if (platform_stop_timer(timer_id) == true)
+        return STUN_OK;
+    else
+        return STUN_NOT_FOUND;
+}
+
+static void pc_rx_data(handle h_inst, handle h_session, 
+            handle h_media, uint32_t comp_id, void *data, uint32_t data_len)
+{
+    printf("Data returned for COMP ID: [%d] %s\n", comp_id, (char *)data);
+    return;
+}
+
+
+static void pc_media_ice_candidate_handler(handle h_inst, handle h_session, 
+                    handle h_media, handle app_handle, ice_cand_params_t *cand)
+{
+    pc_ice_cb(app_handle, cand);
+
+    return;
+}
+
+
+static void pc_media_state_change_handler(handle h_inst, 
+        handle h_session, handle h_media, ice_state_t state, handle app_handle)
+{
+    /* we are not interested in individual media states as of now */
+    printf("************************************************************\n");
+    printf("[PC] ICE media %p state changed to %s\n", 
+                                        h_media, ice_states[state]);
+    printf("************************************************************\n");
+
+    return;
+}
+
+
+
+static void pc_session_state_change_handler(handle h_inst, 
+                handle h_session, ice_state_t state, handle app_handle)
+{
+    mb_status_t status;
+    pc_ctxt_t *ctxt = (pc_ctxt_t *) app_handle;
+
+    if ((state >= ICE_GATHERED) && (state <= ICE_CC_FAILED))
+    {
+        printf("***********************************************************\n");
+        printf("[PC] ICE session %p state changed to %s\n", 
+                                            h_session, ice_states[state]);
+        printf("***********************************************************\n");
+    }
+
+    switch(state)
+    {
+        case ICE_GATHERED: break;
+        case ICE_CC_RUNNING: break;
+
+        case ICE_CC_COMPLETED:
+            printf("ICE negotiation completed, alert the local user\n");
+            status = pc_fsm_inject_msg(ctxt, PC_E_ICE_COMPLETED, NULL, NULL);
+            if (status != MB_OK) {
+                fprintf(stderr, 
+                        "Processing of event PC_E_ICE_COMPLETED failed\n");
+            }
+            break;
+
+        case ICE_CC_FAILED:
+            printf("ICE session failed, destroying session\n");
+            status = pc_fsm_inject_msg(ctxt, PC_E_ICE_FAILED, NULL, NULL);
+            if (status != MB_OK) {
+                fprintf(stderr, "Processing of event PC_E_ICE_FAILED failed\n");
+            }
+            break;
+
+        default: break;
+    }
+
+    return;
+}
+
+
+
+mb_status_t pc_init(pc_ice_candidates_cb ice_cb) {
+
+    mb_status_t status;
+    int32_t ice_status;
+    ice_instance_callbacks_t pc_cbs;
+    ice_state_event_handlers_t pc_event_hdlrs;
+
+    /* init platform */
+    platform_init();
+
+    /* init ice stack */
+    ice_status = ice_create_instance(&g_pc.ice_instance);
+    if (ice_status != STUN_OK) {
+        printf("error: ice init failed with error code %d\n", ice_status);
+        return MB_INT_ERROR;
+    }
+
+    pc_cbs.nwk_cb = pc_nwk_send_msg;
+    pc_cbs.start_timer_cb = pc_start_timer;
+    pc_cbs.stop_timer_cb = pc_stop_timer;
+    pc_cbs.app_data_cb = pc_rx_data;
+
+    ice_status = ice_instance_set_callbacks(g_pc.ice_instance, &pc_cbs);
+    if (ice_status != STUN_OK)
+    {
+        MB_LOG (LOG_SEV_ERROR,
+                "ice_instance_set_callbacks() returned error %d\n", ice_status);
+        goto PC_ERROR_EXIT1;
+    }
+
+    pc_event_hdlrs.session_state_cb = pc_session_state_change_handler;
+    pc_event_hdlrs.media_state_cb = pc_media_state_change_handler;
+    pc_event_hdlrs.trickle_cand_cb = pc_media_ice_candidate_handler;
+
+    ice_status = ice_instance_register_event_handlers(
+                                g_pc.ice_instance, &pc_event_hdlrs);
+    if (ice_status != STUN_OK)
+    {
+        MB_LOG (LOG_SEV_ERROR,
+                "ice_instance_register_event_handlers() returned error %d\n",
+                ice_status);
+        goto PC_ERROR_EXIT1;
+    }
+
+    ice_status = ice_instance_set_client_software_name(
+            g_pc.ice_instance, (u_char *)ICE_VENDOR_NAME, ICE_VENDOR_NAME_LEN);
+    if (ice_status != STUN_OK)
+    {
+        MB_LOG (LOG_SEV_ERROR,
+                "Setting of ICE agent vendor name failed,"\
+                " returned error %d\n", ice_status);
+        goto PC_ERROR_EXIT1;
+    }
+
+    ice_status = ice_instance_set_connectivity_check_nomination_mode(
+                        g_pc.ice_instance, ICE_NOMINATION_TYPE_AGGRESSIVE);
+    if (ice_status != STUN_OK) goto PC_ERROR_EXIT1;
+
+
+    /* initialize the dtls_srtp library */
+    status = dtls_srtp_init();
+    if (status != MB_OK) {
+        fprintf(stderr, "DTLS_SRTP module initialization failed\n");
+        return status;
+    }
+
+    /* initialize the rtp stack */
+
+
+    pc_ice_cb = ice_cb;
+
+    return MB_OK;
+
+PC_ERROR_EXIT1:
+    ice_destroy_instance(g_pc.ice_instance);
+    return MB_INT_ERROR;
+}
+
+
+mb_status_t pc_deinit(void) {
+
+    int32_t ice_status;
+
+    ice_status = ice_destroy_instance(g_pc.ice_instance);
+    if (ice_status != STUN_OK) {
+        MB_LOG(MBLOG_ERROR, 
+                "Destroying of ice instance failed: %d\n", ice_status);
+        return MB_INT_ERROR;
+    }
+
+    return MB_OK;
+}
+
+
+mb_status_t pc_create_session(handle *peerconn) {
+
+    mb_status_t status;
+    int32_t ice_status;
+    ice_stun_server_cfg_t stun_cfg;
+    ice_relay_server_cfg_t turn_cfg;
+    pc_ctxt_t *ctxt = (pc_ctxt_t *) malloc(sizeof(pc_ctxt_t));
+    if (ctxt == NULL) {
+        return MB_MEM_ERROR;
+    }
+
+    ctxt->state = PC_BORN;
+
+    /* create ice session */
+    ice_status = ice_create_session(g_pc.ice_instance, ICE_SESSION_INCOMING, 
+                            ICE_MODE_FULL, (handle)ctxt, &ctxt->ice_session);
+    if (ice_status != STUN_OK) {
+        MB_LOG(MBLOG_ERROR, 
+                "Creating of ice session failed: %d\n", ice_status);
+        status = MB_INT_ERROR;
+        goto MB_ERROR_1;
+    }
+
+    stun_cfg.server.host_type = STUN_INET_ADDR_IPV4;
+    strncpy((char *)&stun_cfg.server.ip_addr, 
+            STUN_SERVER_IP, ICE_IP_ADDR_MAX_LEN - 1);
+    stun_cfg.server.port = STUN_SERVER_PORT;
+
+    ice_status = ice_session_set_stun_server_cfg(
+            g_pc.ice_instance, ctxt->ice_session, &stun_cfg);
+    if (ice_status != STUN_OK) {
+        MB_LOG(MBLOG_ERROR, "Configuring of STUN server "\
+                "configuration to ice session failed: %d\n", ice_status);
+        status = MB_INT_ERROR;
+        goto MB_ERROR_2;
+    }
+
+    turn_cfg.server.host_type = STUN_INET_ADDR_IPV4;
+    strncpy((char *)&turn_cfg.server.ip_addr, 
+            TURN_SERVER_IP, ICE_IP_ADDR_MAX_LEN - 1);
+    turn_cfg.server.port = TURN_SERVER_PORT;
+
+    strncpy((char *)&turn_cfg.username, "asdfghjk", TURN_MAX_USERNAME_LEN - 1);
+    strncpy((char *)&turn_cfg.credential, "zxcvbnm", TURN_MAX_PASSWORD_LEN - 1);
+    strncpy((char *)&turn_cfg.realm, "mindbricks.com", TURN_MAX_REALM_LEN - 1);
+
+    ice_status = ice_session_set_relay_server_cfg(
+            g_pc.ice_instance, ctxt->ice_session, &turn_cfg);
+    if (ice_status != STUN_OK) {
+        MB_LOG(MBLOG_ERROR, "Configuring of TURN server "\
+                "configuration to ice session failed: %d\n", ice_status);
+        status = MB_INT_ERROR;
+        goto MB_ERROR_2;
+    }
+
+    *peerconn = ctxt;
+    return MB_OK;
+
+MB_ERROR_2:
+    ice_destroy_session(g_pc.ice_instance, ctxt->ice_session);
+MB_ERROR_1:
+    free(ctxt);
+    return status;
+}
+
+
+mb_status_t pc_destroy_session(handle peerconn) {
+
+    pc_ctxt_t *ctxt = (pc_ctxt_t *) peerconn;
+
+    if (ctxt->ice_session) ice_destroy_session(
+                        g_pc.ice_instance, ctxt->ice_session);
+
+    free(ctxt);
+
+    return MB_OK;
+}
+
+
+mb_status_t pc_set_remote_media_description(
+                    handle peerconn, pc_media_desc_t *desc) {
+
+    pc_ctxt_t *ctxt = (pc_ctxt_t *)peerconn;
+
+    return pc_fsm_inject_msg(ctxt, PC_E_PEER_MEDIA_PARAMS, desc, NULL);
+}
+
+
+mb_status_t pc_set_remote_ice_candidate(handle peerconn, pc_ice_cand_t *cand) {
+
+    return pc_fsm_inject_msg(
+            (pc_ctxt_t *)peerconn, PC_E_TRICKLED_ICE_CAND, cand, NULL);
+}
+
+
+mb_status_t pc_set_local_media_description(
+                    handle peerconn, pc_local_media_desc_t *desc) {
+
+    pc_ctxt_t *ctxt = (pc_ctxt_t *)peerconn;
+
+    return pc_fsm_inject_msg(ctxt, PC_E_LOCAL_MEDIA_PARAMS, desc, NULL);
+}
+
+mb_status_t pc_inject_data(handle peerconn, pc_rcvd_data_t *data) {
+
+    pc_ctxt_t *ctxt = (pc_ctxt_t *)peerconn;
+
+    return pc_fsm_inject_msg(ctxt, PC_E_DATA, data, NULL);
+}
+
+mb_status_t pc_inject_timer_event(pc_timer_event_t *event) {
+
+    int32_t status;
+    handle ice_session;
+
+    fprintf(stderr, "PC Timer fired. TimerID: %p and Arg:%p\n", 
+                                            event->timer_id, event->arg);
+
+    /* this does not need to go through the pc fsm */
+    status = ice_session_inject_timer_event(
+                        event->timer_id, event->arg, &ice_session);
+    if (status != STUN_OK) {
+        fprintf(stderr, "ICE stack timer event, returned %d\n", status);
+    }
+
+    return MB_OK;
+}
+
+
+/******************************************************************************/
