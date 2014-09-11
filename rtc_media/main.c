@@ -34,7 +34,7 @@ static int g_epfd, g_sigfd, g_timerfd;
 static int pc_port = 51111;
 static char local_ip[48] = "10.1.71.170";
 static mb_log_level_t g_log_sev = MBLOG_CRITICAL;
-static char cert_fp[] = "3c:c7:fa:3e:f5:2a:2d:f1:83:9c:63:d5:f9:e9:4d:cc:f5:e7:0d:81:6e:02:ee:6c:28:da:aa:78:1a:5d:f9:a8";
+static char cert_fp[] = "62:90:01:9c:2b:f3:1a:31:8b:f9:b9:7e:11:b3:41:77:e9:e2:46:8e:d5:8c:a4:a8:62:38:ef:38:e5:20:e5:fa";
 static char *log_levels[] =
 {
     "MBLOG_EMERG",
@@ -343,6 +343,8 @@ int mb_get_local_bound_port(void) {
         printf("Creation of socket descriptor failed\n");
         return 0;
     }
+
+    rtcmedia_make_socket_non_blocking(sockfd);
 
     addr.sin_port = htons(pc_port);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -983,105 +985,6 @@ int main(int argc, char **argv) {
             }
         }
     }
-
-#if 0
-    /* ========== lets simulate an incoming session ========== */
-
-    /* read offer from peer */
-    read_sdp_from_file("peersdp", sdp_buf, &sdpbuf_len);
-    if (sdpbuf_len == 0) {
-        printf("Error while reading SDP. Bailing out ...\n");
-        return -1;
-    }
-
-    /* parse the sdp */
-    parser = sdp_parse(home, sdp_buf, sdpbuf_len, 0);
-    if (!sdp_session(parser)) {
-        printf("SDP parsing error: %s\n", sdp_parsing_error(parser));
-        return -1;
-    }
-
-    sdp = sdp_session(parser);
-    if (sdp == NULL) {
-        printf("SDP parsing error\n");
-        return -1;
-    }
-
-    /* extract peerconn media parameters from peer sdp */
-    status = mb_extract_pc_params_from_sdp(sdp, &peer_desc);
-    if (status != MB_OK) {
-        printf("Error while extrcting peer conn params from peer sdp\n");
-        return -1;
-    }
-
-    /* determine how many rtp/ice sessions peer is proposing */
-    status = mb_determine_rtp_session_count_from_sdp(sdp, &m_count);
-    if (status != MB_OK) {
-        printf("Error while extrcting peer conn params from peer sdp\n");
-        return -1;
-    }
-
-    /* TODO; hardcoded */
-    m_count = 1;
-    comp_count = 1;
-
-    status = mb_create_local_pc_description(&local_desc);
-    if (status != MB_OK) {
-        printf("Error while creating local media params\n");
-        return -1;
-    }
-
-    /* create peerconn session */
-    status = pc_create_session(&peerconn);
-    if (status != MB_OK) {
-        printf("Unable to initialize peerconn library: %d\n", status);
-        return -1;
-    }
-
-    /* set local media description */
-    status = pc_set_local_media_description(peerconn, &local_desc);
-    if (status != MB_OK) {
-        printf("Settng of remote sdp failed\n");
-        return -1;
-    }
-
-    /* set the peer media description */
-    status = pc_set_remote_media_description(peerconn, &peer_desc);
-    if (status != MB_OK) {
-        printf("Settng of remote sdp failed\n");
-        return -1;
-    }
-
-    /* create answer */
-
-
-    /* set remote trickle ice candidates */
-
-
-
-    /* loop on sockets */
-    while(1) {
-        bytes = recvfrom((int)local_desc.host_cands[0].transport_param, 
-                net_buf, 1500, 0, (struct sockaddr *)&recvaddr, &addrlen);
-        if (bytes == -1) continue;
-
-        rx.transport_param = local_desc.host_cands[0].transport_param;
-        rx.buf = net_buf;
-        rx.buf_len = bytes;
-
-        rx.src.host_type = MB_INET_ADDR_IPV4;
-        rx.src.port = ntohs(recvaddr.sin_port);
-        inet_ntop(AF_INET, &recvaddr.sin_addr, 
-                (char *)rx.src.ip_addr, (MB_IPADDR_MAX_LEN - 1));
-        /* TODO; check return value of inet_ntop() */
-
-        status = pc_inject_data(peerconn, &rx);
-        if (status != MB_OK) {
-
-            printf("pc_inject_data() returned error: %d\n", status);
-        }
-    }
-#endif
 
     return 0;
 }

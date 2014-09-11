@@ -62,6 +62,9 @@ typedef struct {
 
     /* sock fd */
     int sock_fd;
+
+    /* peer sock addr */
+    struct sockaddr_in peer_addr;
 } pc_ctxt_t;
 
 

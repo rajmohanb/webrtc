@@ -54,8 +54,8 @@ static void rtcsig_handle_media_server_events(int fd) {
     if (bytes == 0) {
 
         fprintf(stderr, "Did the media server close the connection?\n");
-        FD_CLR(fd, &r_fds);
         close(fd);
+        FD_CLR(fd, &r_fds);
         return;
     }
 

@@ -210,6 +210,30 @@ static void pc_session_state_change_handler(handle h_inst,
 
 
 
+static int pc_send_dtls_srtp_data (
+            handle dtls, char *buf, int len, handle app_handle) {
+
+    pc_ctxt_t *ctxt = (pc_ctxt_t *) app_handle;
+    int bytes = sendto(ctxt->sock_fd, buf, len, 0, 
+            (struct sockaddr *)&ctxt->peer_addr, sizeof(struct sockaddr));
+    if (bytes == -1) {
+        perror("sendto ");
+        fprintf(stderr, "Error when sending DTLS data on socket\n");
+        return bytes;
+    }
+
+    if (bytes < len) {
+        fprintf(stderr, "ERROR: Data sent on "\
+                "socket [%d] less than given size [%d]\n", bytes, len);
+    }
+
+    fprintf(stderr, "[PC] Sent %d bytes of DTLS_SRTP data\n", bytes);
+
+    return bytes;
+}
+
+
+
 mb_status_t pc_init(pc_ice_candidates_cb ice_cb) {
 
     mb_status_t status;
@@ -270,7 +294,7 @@ mb_status_t pc_init(pc_ice_candidates_cb ice_cb) {
 
 
     /* initialize the dtls_srtp library */
-    status = dtls_srtp_init();
+    status = dtls_srtp_init(pc_send_dtls_srtp_data);
     if (status != MB_OK) {
         fprintf(stderr, "DTLS_SRTP module initialization failed\n");
         return status;

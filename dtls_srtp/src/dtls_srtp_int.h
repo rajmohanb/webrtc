@@ -37,9 +37,13 @@ typedef struct {
     X509 *x;
     unsigned char md[EVP_MAX_MD_SIZE];
 
+#if 0
     /* openssl params for dtls */
     BIO *bio;
     SSL *ssl; /* TODO; this should be moved to per session? */
+#endif
+
+    dtls_srtp_data_send_cb cb;
 
 } dtls_srtp_instance_t;
 
@@ -57,6 +61,9 @@ typedef struct {
 
     /* sink memory bio for this session */
     BIO *sink_bio;
+
+    /* opaque application handle */
+    handle app_handle;
 
 } dtls_srtp_session_t;
 

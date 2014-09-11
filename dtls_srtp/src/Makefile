@@ -13,7 +13,7 @@
 #                                                                              #
 #******************************************************************************/
 
-EXT_DEPS := /home/rajmohan/MindBricks/webrtc_stack/ext_libs
+EXT_DEPS := /home/rajmohan/MindBricks/webrtc/ext_libs
 
 LIB := libdtls_srtp.a
 

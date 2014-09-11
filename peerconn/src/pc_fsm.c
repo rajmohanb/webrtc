@@ -51,7 +51,6 @@ static mb_status_t pc_peer_ice (pc_ctxt_t *ctxt, handle msg, handle param);
 static mb_status_t pc_peer_media (
                     pc_ctxt_t *ctxt, handle h_msg, handle param);
 static mb_status_t pc_data (pc_ctxt_t *ctxt, handle msg, handle param);
-//static mb_status_t pc_init_checks (pc_ctxt_t *ctxt, handle msg, handle param);
 static mb_status_t pc_ice_failed (pc_ctxt_t *ctxt, handle msg, handle param);
 static mb_status_t pc_init_dtls (pc_ctxt_t *ctxt, handle msg, handle param);
 
@@ -89,7 +88,7 @@ static pc_fsm_handler
     {
         pc_ignore_msg,
         pc_ignore_msg,
-        pc_ignore_msg,
+        pc_data,
         pc_ignore_msg,
         pc_ignore_msg,
         pc_ignore_msg,
@@ -233,43 +232,28 @@ static mb_status_t pc_peer_media (pc_ctxt_t *ctxt, handle msg, handle param) {
 
 static mb_status_t pc_data (pc_ctxt_t *ctxt, handle msg, handle param) {
 
+    uint8_t byte;
     mb_status_t status;
+    pc_rcvd_data_t *data = (pc_rcvd_data_t *)msg;
 
-    /* TODO; identify the type of message and ignore if not stun or dtls? */
+    byte = *(data->buf);
 
-    status = pc_utils_process_ice_msg(ctxt, (pc_rcvd_data_t *)msg);
+    /* de-multiplexing data as specified in rfc 5764 sec 5.1.2 */
+    if ((byte >= 128) && (byte <= 191)) {
+        printf("This is RTP/RTCP packet\n");
+    } else if ((byte >= 20) && (byte <= 63)) {
+        int is_handshake_done;
+        printf("This is DTLS packet\n");
+        status = dtls_srtp_session_inject_data(
+                ctxt->dtls, data->buf, data->buf_len, &is_handshake_done);
+    } else if ((byte == 0) || (byte == 1)) {
+        status = pc_utils_process_ice_msg(ctxt, data);
+    }
 
     return status;
 }
 
 
-#if 0
-static mb_status_t pc_init_checks (pc_ctxt_t *ctxt, handle msg, handle param) {
-
-    int32_t ice_status;
-
-    ice_status = ice_session_form_check_lists(ice_instance, ctxt->ice_session);
-    if (ice_status != STUN_OK) {
-
-        MB_LOG(MBLOG_ERROR, 
-                "ice_session_form_check_lists() returned error: %d\n", ice_status);
-        ctxt->state = PC_DEAD;
-        return MB_TERMINATED;
-    }
-
-    ice_status = 
-        ice_session_start_connectivity_checks(ice_instance, ctxt->ice_session);
-    if (ice_status != STUN_OK) {
-
-        MB_LOG(MBLOG_ERROR, "ice_session_start_connectivity_checks() "\
-                                            "returned error: %d\n", ice_status);
-        ctxt->state = PC_DEAD;
-        return MB_INT_ERROR;
-    }
-
-    return MB_OK;
-}
-#endif
 
 static mb_status_t pc_init_dtls (pc_ctxt_t *ctxt, handle msg, handle param) {
 
@@ -283,7 +267,8 @@ static mb_status_t pc_init_dtls (pc_ctxt_t *ctxt, handle msg, handle param) {
     }
 
     /* initiate dlts srtp session */
-    status = dtls_srtp_create_session(DTLS_ACTIVE, ctxt->sock_fd, &ctxt->dtls);
+    status = dtls_srtp_create_session(
+            DTLS_ACTIVE, ctxt->sock_fd, ctxt, &ctxt->dtls);
     if (status != MB_OK) {
         fprintf(stderr, "Error while creating DTLS-SRTP session: %d\n", status);
         return status;
@@ -312,7 +297,7 @@ static mb_status_t pc_ice_failed (pc_ctxt_t *ctxt, handle msg, handle param) {
 
 static mb_status_t pc_ignore_msg (pc_ctxt_t *ctxt, handle h_msg, handle param) {
 
-    ICE_LOG(LOG_SEV_ERROR, "[PEERCONN SESSION] Event ignored");
+    fprintf(stderr, "[PEERCONN SESSION] Event ignored");
     return MB_OK;
 }
 
@@ -339,8 +324,6 @@ mb_status_t pc_fsm_inject_msg(pc_ctxt_t *ctxt,
 
     return status;
 }
-
-
 
 
 

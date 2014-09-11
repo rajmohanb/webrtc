@@ -45,7 +45,10 @@ mb_status_t pc_utils_process_ice_msg(pc_ctxt_t *ctxt, pc_rcvd_data_t *msg) {
     int32_t ice_status;
 
     ice_status = ice_instance_verify_valid_stun_packet(msg->buf, msg->buf_len);
-    if(ice_status == STUN_MSG_NOT) return MB_INVALID_PARAMS;
+    if(ice_status == STUN_MSG_NOT) {
+        fprintf(stderr, "******** Non-STUN packet received *********\n");
+        return MB_INVALID_PARAMS;
+    }
 
     ice_status = stun_msg_decode(msg->buf, msg->buf_len, false, &stun_msg); 
     if (ice_status != STUN_OK) {
@@ -79,10 +82,10 @@ mb_status_t pc_utils_make_udp_transport_connected(pc_ctxt_t *ctxt) {
     int ret;
     int32_t ice_status;
     stun_inet_addr_t *peer;
-    struct sockaddr_in dest;
+    //struct sockaddr_in dest;
     ice_session_valid_pairs_t selected_pair;
 
-    memset(&dest, 0, sizeof(dest));
+    memset(&ctxt->peer_addr, 0, sizeof(struct sockaddr_in));
 
     /* 
      * get the ice nominated pairs, so that we can connect the udp socket to 
@@ -105,9 +108,9 @@ mb_status_t pc_utils_make_udp_transport_connected(pc_ctxt_t *ctxt) {
     peer = &selected_pair.media_list[0].pairs[0].peer;
     printf("Nominated Destination pair: %s and %d\n", peer->ip_addr, peer->port);
 
-    dest.sin_family = AF_INET; /* TODO; hard code */
-    dest.sin_port = peer->port;
-    ret  = inet_pton(AF_INET, (char *)peer->ip_addr, &dest.sin_addr);
+    ctxt->peer_addr.sin_family = AF_INET; /* TODO; hard code */
+    ctxt->peer_addr.sin_port = htons(peer->port);
+    ret  = inet_pton(AF_INET, (char *)peer->ip_addr, &ctxt->peer_addr.sin_addr);
     if (ret != 1) {
         perror("inet_pton:");
         ICE_LOG (LOG_SEV_ERROR, 
@@ -115,11 +118,14 @@ mb_status_t pc_utils_make_udp_transport_connected(pc_ctxt_t *ctxt) {
         return MB_INT_ERROR;
     }
 
-    if (connect(ctxt->sock_fd, (struct sockaddr *)&dest, sizeof(dest)) == -1) {
+#if 0
+    if (connect(ctxt->sock_fd, (struct sockaddr *)&ctxt->peer_addr, 
+                                        sizeof(struct sockaddr_in)) == -1) {
         perror("Connect ");
         fprintf(stderr, "Making the UDP socket connected failed\n");
         return MB_INT_ERROR;
     }
+#endif
 
     return MB_OK;
 }

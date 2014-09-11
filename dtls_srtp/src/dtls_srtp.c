@@ -59,16 +59,30 @@ int pc_dtls_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) {
 
 
 
-void dtls_srtp_send_data(dtls_srtp_session_t *s) {
+void dtls_srtp_send_any_pending_data(dtls_srtp_session_t *s) {
 
-    int bytes = BIO_ctrl_pending(s->sink_bio);
+    int sent, pending, buf_len;
+    pending = BIO_ctrl_pending(s->sink_bio);
+    printf("SSL SINK BIO PENDING BYTES: %d\n", pending);
 
-    printf("SSL SINK BIO PENDING BYTES: %d\n", bytes);
+    if (pending) {
+        char buf[pending];
+        buf_len = BIO_read(s->sink_bio, buf, sizeof(buf));
+
+        sent = g_dtls_srtp.cb(s, buf, buf_len, s->app_handle);
+
+        if (sent < buf_len) {
+            fprintf(stderr, "Error sending DTLS data. Sent "\
+                    "only %d bytes against given %d bytes\n", sent, buf_len);
+            /* TODO; what do we do now? error? */
+        }
+    }
+
+    return;
 }
 
 
-
-mb_status_t dtls_srtp_init(void) {
+mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb) {
 
     const EVP_MD *digest;
     unsigned int n, pos;
@@ -157,6 +171,8 @@ mb_status_t dtls_srtp_init(void) {
         goto PC_ERROR_EXIT2;
     }
 
+    g_dtls_srtp.cb = cb;
+
     return MB_OK;
 PC_ERROR_EXIT2:
     /* TODO; free all */
@@ -181,8 +197,8 @@ void dtls_srtp_session_callback(const SSL *ssl, int where, int ret) {
 
 
 
-mb_status_t dtls_srtp_create_session(
-                dtls_setup_role_type_t role, int sock, handle *h_dtls) {
+mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role, 
+                            int sock, handle app_handle, handle *h_dtls) {
 
     dtls_srtp_session_t *s;
 
@@ -192,8 +208,6 @@ mb_status_t dtls_srtp_create_session(
         fprintf(stderr, "Memory allocation for new DTLS_SRTP session failed\n");
         return MB_MEM_ERROR;
     }
-
-    printf("Stage 1\n");
 
     s->ssl = SSL_new(g_dtls_srtp.ctx);
     if (s->ssl == NULL) {
@@ -208,10 +222,8 @@ mb_status_t dtls_srtp_create_session(
 
     SSL_set_info_callback(s->ssl, dtls_srtp_session_callback);
 
-    printf("Stage 2\n");
-
     /* setup the source/read and sink/write bio */
-#if 0
+#if 1
     s->src_bio = BIO_new(BIO_s_mem());
     if (s->src_bio == NULL) {
         fprintf(stderr, "Creation of source BIO for session failed\n");
@@ -221,7 +233,7 @@ mb_status_t dtls_srtp_create_session(
 
     s->sink_bio = BIO_new(BIO_s_mem());
     if (s->sink_bio == NULL) {
-        fprintf(stderr, "Creation of source BIO for session failed\n");
+        fprintf(stderr, "Creation of sink BIO for session failed\n");
         return MB_INT_ERROR;
     }
     BIO_set_mem_eof_return(s->sink_bio, -1);
@@ -232,16 +244,18 @@ mb_status_t dtls_srtp_create_session(
         return MB_INT_ERROR;
     }
 
-    printf("Stage 3\n");
-
-    s->sink_bio = BIO_new_socket(sock, 1);
+    /* 
+     * Too bad! tried to use connected udp socket, but chrome refuses connect 
+     * on the udp connection. Falling back to mem BIO for outbound data.
+     */
+    s->sink_bio = BIO_new(BIO_s_mem());
     if (s->sink_bio == NULL) {
-        fprintf(stderr, "Creation of source BIO for session failed\n");
+        fprintf(stderr, "Creation of sink BIO for session failed\n");
         return MB_INT_ERROR;
     }
+    
+    BIO_set_mem_eof_return(s->sink_bio, -1);
 #endif
-
-    printf("Stage 4\n");
 
     SSL_set_bio(s->ssl, s->src_bio, s->sink_bio);
 
@@ -254,7 +268,7 @@ mb_status_t dtls_srtp_create_session(
         printf("SSL session role: Accept role\n");
     }
 
-    printf("Stage 5\n");
+    s->app_handle = app_handle;
 
     *h_dtls = s;
 
@@ -271,6 +285,7 @@ mb_status_t dtls_srtp_session_do_handshake(handle h_dtls) {
     dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
 
     ret = SSL_do_handshake(s->ssl);
+    printf("SSL_do_handshake : %d\n", ret);
     if (ret != 1) {
         int err = SSL_get_error(s->ssl, ret);
         printf("[%d] SSL_do_handshake: %d\n", ret, err);
@@ -325,6 +340,35 @@ mb_status_t dtls_srtp_session_do_handshake(handle h_dtls) {
 #endif
         }
     }
+
+    dtls_srtp_send_any_pending_data(s);
+
+    return MB_OK;
+}
+
+
+
+mb_status_t dtls_srtp_session_inject_data(handle h_dtls, 
+                    uint8_t *data, int len, int *is_handshake_done) {
+
+    int written;
+    dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
+
+    written = BIO_write(s->src_bio, data, len);
+    if (written) {
+        if (!SSL_is_init_finished(s->ssl)) {
+            printf("SSL handshake NOT ye complete\n");
+            SSL_do_handshake(s->ssl); /* TODO; check return value? */
+            *is_handshake_done = 0;
+        } else {
+            *is_handshake_done = 1;
+            printf("SSL handshake is complete. Encrypted data of len %d?\n", len);
+        }
+    } else {
+        printf("BIO_write() returned error\n");
+    }
+
+    dtls_srtp_send_any_pending_data(s);
 
     return MB_OK;
 }
