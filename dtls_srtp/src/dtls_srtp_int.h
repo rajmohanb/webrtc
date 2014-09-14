@@ -30,6 +30,17 @@ extern "C" {
 #define PC_DTLS_CIPHERS     "ALL:NULL:eNULL:aNULL"
 
 
+
+typedef enum {
+    DTLS_SRTP_INVALID_STATE,
+    DTLS_SRTP_INIT,
+    DTLS_SRTP_HANDSHAKING,
+    DTLS_SRTP_READY,
+    DTLS_SRTP_MAX_STATE,
+} dtls_srtp_state_t;
+
+
+
 typedef struct {
 
     SSL_CTX *ctx;
@@ -64,6 +75,9 @@ typedef struct {
 
     /* opaque application handle */
     handle app_handle;
+
+    /* state */
+    dtls_srtp_state_t state;
 
 } dtls_srtp_session_t;
 

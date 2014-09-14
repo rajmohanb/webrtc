@@ -243,9 +243,10 @@ static mb_status_t pc_data (pc_ctxt_t *ctxt, handle msg, handle param) {
         printf("This is RTP/RTCP packet\n");
     } else if ((byte >= 20) && (byte <= 63)) {
         int is_handshake_done;
-        printf("This is DTLS packet\n");
-        status = dtls_srtp_session_inject_data(
+        dtls_srtp_session_inject_data(
                 ctxt->dtls, data->buf, data->buf_len, &is_handshake_done);
+        if (is_handshake_done == 1) {
+        }
     } else if ((byte == 0) || (byte == 1)) {
         status = pc_utils_process_ice_msg(ctxt, data);
     }

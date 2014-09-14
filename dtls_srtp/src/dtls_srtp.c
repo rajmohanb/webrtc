@@ -223,7 +223,6 @@ mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role,
     SSL_set_info_callback(s->ssl, dtls_srtp_session_callback);
 
     /* setup the source/read and sink/write bio */
-#if 1
     s->src_bio = BIO_new(BIO_s_mem());
     if (s->src_bio == NULL) {
         fprintf(stderr, "Creation of source BIO for session failed\n");
@@ -237,25 +236,6 @@ mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role,
         return MB_INT_ERROR;
     }
     BIO_set_mem_eof_return(s->sink_bio, -1);
-#else
-    s->src_bio = BIO_new_socket(sock, 1);
-    if (s->src_bio == NULL) {
-        fprintf(stderr, "Creation of source BIO for session failed\n");
-        return MB_INT_ERROR;
-    }
-
-    /* 
-     * Too bad! tried to use connected udp socket, but chrome refuses connect 
-     * on the udp connection. Falling back to mem BIO for outbound data.
-     */
-    s->sink_bio = BIO_new(BIO_s_mem());
-    if (s->sink_bio == NULL) {
-        fprintf(stderr, "Creation of sink BIO for session failed\n");
-        return MB_INT_ERROR;
-    }
-    
-    BIO_set_mem_eof_return(s->sink_bio, -1);
-#endif
 
     SSL_set_bio(s->ssl, s->src_bio, s->sink_bio);
 
@@ -269,6 +249,8 @@ mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role,
     }
 
     s->app_handle = app_handle;
+
+    s->state = DTLS_SRTP_INIT;
 
     *h_dtls = s;
 
@@ -343,6 +325,8 @@ mb_status_t dtls_srtp_session_do_handshake(handle h_dtls) {
 
     dtls_srtp_send_any_pending_data(s);
 
+    s->state = DTLS_SRTP_HANDSHAKING;
+
     return MB_OK;
 }
 
@@ -356,13 +340,19 @@ mb_status_t dtls_srtp_session_inject_data(handle h_dtls,
 
     written = BIO_write(s->src_bio, data, len);
     if (written) {
-        if (!SSL_is_init_finished(s->ssl)) {
-            printf("SSL handshake NOT ye complete\n");
-            SSL_do_handshake(s->ssl); /* TODO; check return value? */
-            *is_handshake_done = 0;
+        if (s->state == DTLS_SRTP_HANDSHAKING) {
+            if (!SSL_is_init_finished(s->ssl)) {
+                printf("SSL handshake NOT ye complete\n");
+                SSL_do_handshake(s->ssl); /* TODO; check return value? */
+                *is_handshake_done = 0;
+            } else {
+                /* check the peer certificate */
+                s->state = DTLS_SRTP_READY;
+                *is_handshake_done = 1;
+                printf("SSL handshake is complete. Encrypted data of len %d?\n", len);
+            }
         } else {
-            *is_handshake_done = 1;
-            printf("SSL handshake is complete. Encrypted data of len %d?\n", len);
+            /* we are ready */
         }
     } else {
         printf("BIO_write() returned error\n");
