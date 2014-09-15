@@ -264,14 +264,6 @@ mb_status_t mb_extract_pc_params_from_sdp(
                 printf("Candidate attribute received: Len %d TODO %s\n", 
                                     strlen(attr->a_value), attr->a_value);
                 *ice_found = true;
-#if 0
-                snprintf(icedesc, 128, "a=candidate:%s", attr->a_value);
-                rtcmedia_process_ice_description(icedesc, strlen(icedesc));
-#endif
-#if 0 
-                rtcmedia_process_ice_description(
-                                (char *)attr->a_value, strlen(attr->a_value));
-#endif
             }
             else if (strncasecmp(attr->a_name, "ice-ufrag", 9) == 0) {
                 strncpy(pc_media->ice_ufrag, attr->a_value, PC_ICE_MAX_UFRAG_LEN);
@@ -296,14 +288,17 @@ mb_status_t mb_extract_pc_params_from_sdp(
                     printf("Unknown fingerprint key type: %s\n", token);
                 }
 
-                while((token = strtok(NULL, " "))) {
+                while(token = strtok(NULL, " ")) {
+                
+                    strncpy(pc_media->fp_key, token, MAX_DTLS_FINGERPRINT_KEY_LEN);
+#if 0
                     int i = 0;
                     while(*token) {
                         if (*token == ':') { token++; continue;}
                         pc_media->fp_key[i] = *token;
                         token++; i++;
                     }
-                    //strncpy(pc_media->fp_key, token, MAX_DTLS_FINGERPRINT_KEY_LEN);
+#endif
                 }
 
             }
@@ -543,14 +538,16 @@ mb_status_t mb_create_send_answer(pc_local_media_desc_t *l, ice_cand_params_t *c
             }
             else if (strncasecmp(attr->a_name, "fingerprint", 11) == 0) {
 
-                int i = 0;
+                int j, i = 0;
                 char *ptr, fp[128] = {0};
                 ptr = fp;
 
                 strcpy(ptr, "sha-256 ");
                 ptr += 8;
 
-                while(i < MAX_DTLS_FINGERPRINT_KEY_LEN)
+                j = strlen(l->fp_key);
+
+                while(i < j)
                 {
                     *ptr = l->fp_key[i];
                     ptr++; i++;
@@ -579,7 +576,7 @@ mb_status_t mb_create_send_answer(pc_local_media_desc_t *l, ice_cand_params_t *c
 
         msg[size] = 0;
 
-        //printf("Message of length [%d] : send to peer:\n%s\n", size, msg);
+        printf("Message of length [%d] : send to peer:\n%s\n", size, msg);
 
         /* send to signaling server */
         size = send(g_sigfd, msg, size, 0);
@@ -590,6 +587,7 @@ mb_status_t mb_create_send_answer(pc_local_media_desc_t *l, ice_cand_params_t *c
         }
 
         /* TODO; is it possible, less size data is sent? loop? */
+        printf("Sent Answer to Signaling of Size: %d\n", size);
     }
     else
     {

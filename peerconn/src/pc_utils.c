@@ -31,6 +31,10 @@
 #include <srtp/srtp.h>
 
 #include <mb_types.h>
+
+/* dtls */
+#include <dtls_srtp.h>
+
 #include <pc.h>
 #include <pc_int.h>
 
@@ -126,6 +130,55 @@ mb_status_t pc_utils_make_udp_transport_connected(pc_ctxt_t *ctxt) {
         return MB_INT_ERROR;
     }
 #endif
+
+    return MB_OK;
+}
+
+
+
+mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
+
+    mb_status_t status;
+    uint32_t i, len = EVP_MAX_MD_SIZE;
+    unsigned char peer_fp[EVP_MAX_MD_SIZE] = {0};
+    char *ptr, fingerprint[MAX_DTLS_FINGERPRINT_KEY_LEN] = {0};
+
+    ptr = fingerprint;
+
+    status = dtls_srtp_session_get_peer_fingerprint(ctxt->dtls, peer_fp, &len);
+    if (status != MB_OK) {
+        fprintf(stderr, 
+                "ERROR: while retrieving DTLS peer certificate fingerprint\n");
+        return status;
+    }
+
+    /* string compare if failing! need to format the string for comparision */
+    for (i = 0; i < len; i++) {
+        ptr += sprintf(ptr, "%.2X:", peer_fp[i]);
+    }
+    ptr--; *ptr = 0;
+
+    /* 
+     * compare the peer cert fingerprint retrieved from the peer 
+     * certificate against the one received in the signaling.
+     * TODO; should I use memcmp() because of unsigned char? but it's all ascii
+     */
+    printf("FP1: %s\n", ctxt->peer_cert_fp);
+    printf("FP2: %s\n", fingerprint);
+    if (strcasecmp((char *)ctxt->peer_cert_fp, (char *)fingerprint) != 0) {
+
+        /* no match! */
+        fprintf(stderr, "Matching of peer certificate fingerprint received "\
+                "from the peer via signaling and the one received over DTLS "\
+                "failed. Intruder alert?\n");
+        ctxt->state = PC_DEAD;
+        /* TODO; How do we notify the app to terminate this pc session? */
+        return MB_VALIDATON_FAIL;
+    }
+
+    fprintf(stderr, "DTLS certificates matched\n");
+
+    ctxt->state = PC_ACTIVE;
 
     return MB_OK;
 }

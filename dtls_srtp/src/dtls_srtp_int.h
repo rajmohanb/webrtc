@@ -79,6 +79,13 @@ typedef struct {
     /* state */
     dtls_srtp_state_t state;
 
+    /* certificate digest type */
+    dtls_key_type_t digest_type;
+
+    /* peer certificate fingerprint */
+    unsigned char peer_fp[EVP_MAX_MD_SIZE];
+    uint32_t peer_fp_len;
+
 } dtls_srtp_session_t;
 
 

@@ -28,7 +28,7 @@ extern "C" {
 #define TURN_SERVER_PORT    3478
 
 /* DTLS defines */
-#define MAX_DTLS_FINGERPRINT_KEY_LEN    64
+#define MAX_DTLS_FINGERPRINT_KEY_LEN    128 
 
 /* ICE defines */
 #define PC_ICE_MAX_UFRAG_LEN    256

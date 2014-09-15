@@ -54,8 +54,10 @@ static void rtcsig_handle_media_server_events(int fd) {
     if (bytes == 0) {
 
         fprintf(stderr, "Did the media server close the connection?\n");
-        close(fd);
         FD_CLR(fd, &r_fds);
+        close(fd);
+        media_server_fd = 0;
+        fprintf(stderr, "Media server closed/lost the connection\n");
         return;
     }
 
@@ -383,11 +385,11 @@ int main(int argc, char **argv) {
     /* keep servicing the websockets */
     while(1) {
 
-        r_fds = temp_fds;
+        temp_fds = r_fds;
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
 
-        fd_count = select((max_fd+1), &r_fds, NULL, NULL, &timeout); 
+        fd_count = select((max_fd+1), &temp_fds, NULL, NULL, &timeout); 
         if (fd_count == -1) {
             perror("Select ");
             fprintf(stderr, "Select returned error\n");
@@ -396,7 +398,7 @@ int main(int argc, char **argv) {
 
         for (n = 0; n < fd_count; n++) {
 
-            if (FD_ISSET(listen_fd, &r_fds)) {
+            if (FD_ISSET(listen_fd, &temp_fds)) {
 
                 size = sizeof(caddr);
                 /* connect request from a media server */
@@ -408,10 +410,12 @@ int main(int argc, char **argv) {
                     continue;
                 }
 
+                fprintf(stderr, "One media server client connected FD: %d\n", media_server_fd); 
+
                 if (media_server_fd > max_fd) max_fd = media_server_fd;
-                FD_SET(media_server_fd, &temp_fds);
+                FD_SET(media_server_fd, &r_fds);
                 continue;
-            } else if (FD_ISSET(media_server_fd, &r_fds)) {
+            } else if (FD_ISSET(media_server_fd, &temp_fds)) {
 
                 /* handle data from media server */
                 rtcsig_handle_media_server_events(media_server_fd);

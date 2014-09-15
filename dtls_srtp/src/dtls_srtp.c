@@ -105,6 +105,7 @@ mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb) {
     SSL_CTX_set_verify(g_dtls_srtp.ctx, 
             SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 
             pc_dtls_verify_callback);
+    /* rfc 5764 sec 4.1 */
     SSL_CTX_set_tlsext_use_srtp(g_dtls_srtp.ctx, "SRTP_AES128_CM_SHA1_80");
     if (SSL_CTX_use_certificate_file(
                 g_dtls_srtp.ctx, PC_DTLS_CERT_FILE, SSL_FILETYPE_PEM) != 1) {
@@ -198,7 +199,7 @@ void dtls_srtp_session_callback(const SSL *ssl, int where, int ret) {
 
 
 mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role, 
-                            int sock, handle app_handle, handle *h_dtls) {
+            dtls_key_type_t type, int sock, handle app_handle, handle *h_dtls) {
 
     dtls_srtp_session_t *s;
 
@@ -249,6 +250,7 @@ mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role,
     }
 
     s->app_handle = app_handle;
+    s->digest_type = type;
 
     s->state = DTLS_SRTP_INIT;
 
@@ -336,29 +338,87 @@ mb_status_t dtls_srtp_session_inject_data(handle h_dtls,
                     uint8_t *data, int len, int *is_handshake_done) {
 
     int written;
+    X509 *peer_cert;
     dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
+
+    *is_handshake_done = 0;
 
     written = BIO_write(s->src_bio, data, len);
     if (written) {
         if (s->state == DTLS_SRTP_HANDSHAKING) {
             if (!SSL_is_init_finished(s->ssl)) {
-                printf("SSL handshake NOT ye complete\n");
+
+                printf("&&&&&&&&&&&&&& SSL handshake NOT yet complete &&&&&&&&&&&&&&&&&&&\n");
                 SSL_do_handshake(s->ssl); /* TODO; check return value? */
-                *is_handshake_done = 0;
-            } else {
+            }
+
+            /*
+             * Damn! The reason why the SSL was not returning as complete
+             * was because we need to check the status even after every
+             * call to SSL_do_handshake(). Costed me 2-3 days!
+             */
+            if (SSL_is_init_finished(s->ssl)) {
+
+                EVP_MD *tmp_d;
+                unsigned int i;
+
+                printf("********** HANDSHAKE DONE **************\n");
+
                 /* check the peer certificate */
+                peer_cert = SSL_get_peer_certificate(s->ssl);
+                if (peer_cert == NULL) {
+                    fprintf(stderr, "DTLS Handshake "\
+                            "completed. Peer certificate missing\n");
+                    return MB_INVALID_PARAMS;
+                }
+
+                if (s->digest_type == DTLS_SHA1) {
+                    tmp_d = EVP_sha1();
+                } else if (s->digest_type == DTLS_SHA256) {
+                    tmp_d = EVP_sha256();
+                } else {
+                    return MB_NOT_SUPPORTED;
+                }
+
+                X509_digest(peer_cert, tmp_d, s->peer_fp, &s->peer_fp_len);
+
+                printf("PEER CERTIFICATE FINGERPRINT: ");
+
+                for (i = 0; i < s->peer_fp_len; i++) {
+                    printf("%02X:", s->peer_fp[i]);
+                }
+                printf("\n");
+
                 s->state = DTLS_SRTP_READY;
                 *is_handshake_done = 1;
                 printf("SSL handshake is complete. Encrypted data of len %d?\n", len);
             }
         } else {
-            /* we are ready */
+            /* TODO; we are ready */
         }
     } else {
         printf("BIO_write() returned error\n");
     }
 
     dtls_srtp_send_any_pending_data(s);
+
+    return MB_OK;
+}
+
+
+
+mb_status_t dtls_srtp_session_get_peer_fingerprint(
+                    handle h_dtls, unsigned char *fp, uint32_t *fp_len) {
+
+    dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
+
+    if (s->state != DTLS_SRTP_READY) return MB_NOT_FOUND;
+
+    if (*fp_len < s->peer_fp_len) return MB_MEM_INSUF;
+
+    /* TODO; use memcpy? */
+    strncpy((char *)fp, (char *)s->peer_fp, s->peer_fp_len);
+    *fp_len = s->peer_fp_len;
 
     return MB_OK;
 }

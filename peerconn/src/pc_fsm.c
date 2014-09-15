@@ -197,6 +197,11 @@ static mb_status_t pc_peer_media (pc_ctxt_t *ctxt, handle msg, handle param) {
     peer_params.ice_mode = ICE_MODE_FULL; /* TODO; hardcoded */
     peer_params.num_media = 1;            /* TODO; hardcoded */
 
+    /* make a copy of the dtls parameters for later use */
+    strncpy((char *)ctxt->peer_cert_fp, 
+                peer_desc->fp_key, MAX_DTLS_FINGERPRINT_KEY_LEN);
+    ctxt->dtls_role = peer_desc->role;
+    ctxt->dtls_key_type = peer_desc->dtls_key_type;
 
     memcpy(peer_params.media[0].ice_ufrag, 
             peer_desc->ice_ufrag, PC_ICE_MAX_UFRAG_LEN);
@@ -246,6 +251,7 @@ static mb_status_t pc_data (pc_ctxt_t *ctxt, handle msg, handle param) {
         dtls_srtp_session_inject_data(
                 ctxt->dtls, data->buf, data->buf_len, &is_handshake_done);
         if (is_handshake_done == 1) {
+            status = pc_utils_verify_peer_fingerprint(ctxt);
         }
     } else if ((byte == 0) || (byte == 1)) {
         status = pc_utils_process_ice_msg(ctxt, data);
@@ -268,8 +274,9 @@ static mb_status_t pc_init_dtls (pc_ctxt_t *ctxt, handle msg, handle param) {
     }
 
     /* initiate dlts srtp session */
+    /* TODO; hard coded SHA 256 */
     status = dtls_srtp_create_session(
-            DTLS_ACTIVE, ctxt->sock_fd, ctxt, &ctxt->dtls);
+            DTLS_ACTIVE, DTLS_SHA256, ctxt->sock_fd, ctxt, &ctxt->dtls);
     if (status != MB_OK) {
         fprintf(stderr, "Error while creating DTLS-SRTP session: %d\n", status);
         return status;

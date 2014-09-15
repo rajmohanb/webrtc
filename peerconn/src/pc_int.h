@@ -60,6 +60,11 @@ typedef struct {
     /* dtls session */
     handle dtls;
 
+    /* dtls parameters */
+    unsigned char peer_cert_fp[MAX_DTLS_FINGERPRINT_KEY_LEN];
+    pc_dtls_key_type_t dtls_key_type;
+    pc_dtls_role_t dtls_role;
+
     /* sock fd */
     int sock_fd;
 
@@ -84,7 +89,11 @@ mb_status_t pc_fsm_inject_msg(pc_ctxt_t *ctxt,
 /* utilities */
 
 mb_status_t pc_utils_make_udp_transport_connected(pc_ctxt_t *ctxt);
+
 mb_status_t pc_utils_process_ice_msg(pc_ctxt_t *ctxt, pc_rcvd_data_t *msg);
+
+mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt);
+
 
 /******************************************************************************/
 

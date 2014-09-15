@@ -16,6 +16,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+/* openssl */
+#include <openssl/ssl.h>
+
 /* ice */
 #include <stun_base.h>
 #include <ice_api.h>
