@@ -19,6 +19,9 @@
 /* openssl */
 #include <openssl/ssl.h>
 
+/* srtp */
+#include <srtp/srtp.h>
+
 /* ice */
 #include <stun_base.h>
 #include <ice_api.h>

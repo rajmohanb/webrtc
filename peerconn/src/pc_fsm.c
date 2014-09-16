@@ -97,7 +97,7 @@ static pc_fsm_handler
     {
         pc_ignore_msg,
         pc_ignore_msg,
-        pc_ignore_msg,
+        pc_data,
         pc_ignore_msg,
         pc_ignore_msg,
         pc_ignore_msg,
@@ -200,7 +200,7 @@ static mb_status_t pc_peer_media (pc_ctxt_t *ctxt, handle msg, handle param) {
     /* make a copy of the dtls parameters for later use */
     strncpy((char *)ctxt->peer_cert_fp, 
                 peer_desc->fp_key, MAX_DTLS_FINGERPRINT_KEY_LEN);
-    ctxt->dtls_role = peer_desc->role;
+    ctxt->peer_dtls_role = peer_desc->role;
     ctxt->dtls_key_type = peer_desc->dtls_key_type;
 
     memcpy(peer_params.media[0].ice_ufrag, 
@@ -245,7 +245,7 @@ static mb_status_t pc_data (pc_ctxt_t *ctxt, handle msg, handle param) {
 
     /* de-multiplexing data as specified in rfc 5764 sec 5.1.2 */
     if ((byte >= 128) && (byte <= 191)) {
-        printf("This is RTP/RTCP packet\n");
+        pc_utils_process_srtp_packet(ctxt, data->buf, data->buf_len);
     } else if ((byte >= 20) && (byte <= 63)) {
         int is_handshake_done;
         dtls_srtp_session_inject_data(
@@ -305,7 +305,7 @@ static mb_status_t pc_ice_failed (pc_ctxt_t *ctxt, handle msg, handle param) {
 
 static mb_status_t pc_ignore_msg (pc_ctxt_t *ctxt, handle h_msg, handle param) {
 
-    fprintf(stderr, "[PEERCONN SESSION] Event ignored");
+    fprintf(stderr, "[PEERCONN SESSION] Event ignored\n");
     return MB_OK;
 }
 

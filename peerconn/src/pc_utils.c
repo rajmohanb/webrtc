@@ -142,6 +142,8 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
     uint32_t i, len = EVP_MAX_MD_SIZE;
     unsigned char peer_fp[EVP_MAX_MD_SIZE] = {0};
     char *ptr, fingerprint[MAX_DTLS_FINGERPRINT_KEY_LEN] = {0};
+    unsigned char in_policy_key[SRTP_MASTER_KEY_LEN];
+    err_status_t err;
 
     ptr = fingerprint;
 
@@ -178,7 +180,87 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
 
     fprintf(stderr, "DTLS certificates matched\n");
 
+    status = dtls_srtp_session_get_keying_material(
+                                        ctxt->dtls, ctxt->keying_material);
+    if (status != MB_OK) {
+        fprintf(stderr, "ERROR: while retrieving "\
+                "SRTP Keying Material from DTLS session\n");
+        return status;
+    }
+
+    /* chosse a dtls role */
+    if (ctxt->peer_dtls_role == PC_DTLS_ACTPASS)
+        ctxt->my_dtls_role = PC_DTLS_ACTIVE;
+    else if (ctxt->peer_dtls_role == PC_DTLS_ACTIVE)
+        ctxt->my_dtls_role = PC_DTLS_PASSIVE;
+    else if (ctxt->peer_dtls_role == PC_DTLS_PASSIVE)
+        ctxt->my_dtls_role = PC_DTLS_ACTIVE;
+    else {
+        fprintf(stderr,"Unsupported Peer DTLS Role %d\n", ctxt->peer_dtls_role);
+        return MB_INT_ERROR;
+    }
+
+    if (ctxt->my_dtls_role == PC_DTLS_ACTIVE) {
+        /* client */
+        ctxt->local_key = ctxt->keying_material;
+        ctxt->peer_key = ctxt->local_key + SRTP_KEY_LEN;
+        ctxt->local_salt = ctxt->peer_key + SRTP_KEY_LEN;
+        ctxt->peer_salt = ctxt->local_salt + SRTP_SALT_LEN;
+    } else if (ctxt->my_dtls_role == PC_DTLS_PASSIVE) {
+        /* server */
+        ctxt->peer_key = ctxt->keying_material;
+        ctxt->local_key = ctxt->local_key + SRTP_KEY_LEN;
+        ctxt->peer_salt = ctxt->peer_key + SRTP_KEY_LEN;
+        ctxt->local_salt = ctxt->local_salt + SRTP_SALT_LEN;
+    } else {
+        fprintf(stderr, "Unknown DTLS ROLE: %d\n", ctxt->my_dtls_role);
+        return MB_INT_ERROR;
+    }
+
+    memset(&in_policy_key, 0, sizeof(in_policy_key));
+
+    /* setup srtp sessions */
+    crypto_policy_set_rtp_default(&ctxt->in_policy.rtp);
+    crypto_policy_set_rtcp_default(&ctxt->in_policy.rtcp);
+    ctxt->in_policy.ssrc.type = ssrc_any_inbound;
+    ctxt->in_policy.key = in_policy_key;
+    memcpy(ctxt->in_policy.key, ctxt->peer_key, SRTP_KEY_LEN);
+    memcpy((ctxt->in_policy.key+SRTP_KEY_LEN), ctxt->peer_salt, SRTP_SALT_LEN);
+    ctxt->in_policy.window_size = 1024;  /* optimal value? */
+    ctxt->in_policy.allow_repeat_tx = 0; /* TODO; Chrome sets it to 1? */
+    ctxt->in_policy.next = NULL;
+
+    err = srtp_create(&ctxt->srtp_in, &ctxt->in_policy);
+    if (err != err_status_ok) {
+        fprintf(stderr, "Creation of inbound srtp session failed\n");
+        return MB_INT_ERROR;
+    }
+
     ctxt->state = PC_ACTIVE;
+
+    fprintf(stderr, "PC Session moved to PC_ACTIVE state\n");
+
+    return MB_OK;
+}
+
+
+
+mb_status_t pc_utils_process_srtp_packet(
+                    pc_ctxt_t *ctxt, uint8_t *buf, uint32_t len) {
+
+    err_status_t err;
+    int rtp_len = len;
+
+    fprintf(stderr, "Before Unprotect: buf %p and len %d\n", buf, rtp_len);
+
+    err = srtp_unprotect(ctxt->srtp_in, buf, &rtp_len);
+    if (err != err_status_ok) {
+        fprintf(stderr, "SRTP unprotect() "\
+                "returned error %d Starting byte %d\n", err, *buf);
+        return MB_INVALID_PARAMS;
+    }
+
+    fprintf(stderr, "After Unprotect: buf %p and len %d\n", buf, rtp_len);
 
     return MB_OK;
 }

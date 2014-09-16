@@ -63,6 +63,10 @@ mb_status_t dtls_srtp_session_get_peer_fingerprint(
                     handle h_dtls, unsigned char *fp, uint32_t *fp_len);
 
 
+mb_status_t dtls_srtp_session_get_keying_material(
+                        handle h_dtls, unsigned char *keying_material);
+
+
 mb_status_t dtls_srtp_destroy_session(handle h_dtls);
 
 

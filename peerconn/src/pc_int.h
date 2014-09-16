@@ -23,6 +23,10 @@ extern "C" {
 /******************************************************************************/
 
 
+/* defined in rfc 3711 */
+#define SRTP_KEY_LEN    16
+#define SRTP_SALT_LEN   14
+
 
 typedef enum {
     PC_BORN,
@@ -59,17 +63,33 @@ typedef struct {
 
     /* dtls session */
     handle dtls;
+    pc_dtls_role_t my_dtls_role;
 
     /* dtls parameters */
     unsigned char peer_cert_fp[MAX_DTLS_FINGERPRINT_KEY_LEN];
     pc_dtls_key_type_t dtls_key_type;
-    pc_dtls_role_t dtls_role;
+    pc_dtls_role_t peer_dtls_role;
 
     /* sock fd */
     int sock_fd;
 
     /* peer sock addr */
     struct sockaddr_in peer_addr;
+
+    /* TODO; only inbound for now */
+    /* srtp session */
+    srtp_t srtp_in;
+
+    /* srtp keying material from dtls (client key, salt & server key, salt */
+    unsigned char keying_material[SRTP_MASTER_KEY_LEN * 2];
+    unsigned char *local_key, *local_salt;
+    unsigned char *peer_key, *peer_salt;
+
+    /* TODO; 
+     * Chrome only as of now, assumption is BUNDLE is used and rtcp-mux is used
+     */
+    /* only inbound data for now */
+    srtp_policy_t in_policy;
 } pc_ctxt_t;
 
 

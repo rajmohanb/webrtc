@@ -391,7 +391,6 @@ mb_status_t dtls_srtp_session_inject_data(handle h_dtls,
 
                 s->state = DTLS_SRTP_READY;
                 *is_handshake_done = 1;
-                printf("SSL handshake is complete. Encrypted data of len %d?\n", len);
             }
         } else {
             /* TODO; we are ready */
@@ -419,6 +418,31 @@ mb_status_t dtls_srtp_session_get_peer_fingerprint(
     /* TODO; use memcpy? */
     strncpy((char *)fp, (char *)s->peer_fp, s->peer_fp_len);
     *fp_len = s->peer_fp_len;
+
+    return MB_OK;
+}
+
+
+
+mb_status_t dtls_srtp_session_get_keying_material(
+                        handle h_dtls, unsigned char *keying_material) {
+
+    int ret;
+    dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
+
+    if (s->state != DTLS_SRTP_READY) return MB_NOT_FOUND;
+
+    /* TODO; Need to ensure buf is atleast of required length */
+
+    /* extract the keying material from the dtls association - rfc 5705 */
+    ret = SSL_export_keying_material(s->ssl, keying_material, 
+            (SRTP_MASTER_KEY_LEN * 2), "EXTRACTOR-dtls_srtp", 19, NULL, 0, 0);
+    if (ret != 1) {
+
+        fprintf(stderr, "Error while "\
+                "extracting the keying material from DTLS association\n");
+        return MB_VALIDATON_FAIL;
+    }
 
     return MB_OK;
 }
