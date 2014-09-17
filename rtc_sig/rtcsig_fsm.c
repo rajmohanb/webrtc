@@ -144,10 +144,6 @@ static mb_status_t rtcsig_local_media (
     char *sdp_buf = (char *)h_msg;
     char *ans = NULL;
     int l = 0, n;
-#if 0
-	unsigned char buf[LWS_SEND_BUFFER_PRE_PADDING + 4096 +
-						  LWS_SEND_BUFFER_POST_PADDING];
-#endif
 
     sdp_buf[(int)h_param] = 0; /* Fix for non-utf8 characters */
     printf("Received answer to be sent of len %d: %s\n", (int)h_param, sdp_buf); 
@@ -192,23 +188,6 @@ static mb_status_t rtcsig_local_media (
     libwebsocket_callback_on_writable_all_protocol(
                         libwebsockets_get_protocol(session->wsi));
 
-#if 0
-    l += sprintf((char *)&buf[LWS_SEND_BUFFER_PRE_PADDING + l], "%s", ans);
-    n = libwebsocket_write(session->wsi, 
-            &buf[LWS_SEND_BUFFER_PRE_PADDING], l, LWS_WRITE_TEXT);
-
-    if (n < 0) {
-        lwsl_err("NO write LWS_CALLBACK_CLIENT_WRITEABLE\n");
-        return -1;
-    }
-
-    if (n < l) {
-        lwsl_err("Partial write LWS_CALLBACK_CLIENT_WRITEABLE\n");
-        return -1;
-    }
-    fprintf(stderr, "Sent %d bytes to signaling server\n", n);
-#endif
-
     session->state = RTC_LIVE;
 
     free(ans);
@@ -226,10 +205,6 @@ static mb_status_t rtcsig_local_ice (
     char *ice = NULL;
     int l = 0, n;
     char oneline[128];
-#if 0
-    unsigned char buf[LWS_SEND_BUFFER_PRE_PADDING + 4096 +
-						  LWS_SEND_BUFFER_POST_PADDING];
-#endif
 
     fprintf(stderr, "Received ICE information of len "\
             "[%d] from media server: %s\n", (int)h_param, rcvd_buf);
@@ -278,24 +253,6 @@ static mb_status_t rtcsig_local_ice (
 
         libwebsocket_callback_on_writable_all_protocol(
                             libwebsockets_get_protocol(session->wsi));
-
-
-#if 0
-        l = sprintf((char *)&buf[LWS_SEND_BUFFER_PRE_PADDING + l], "%s", ice);
-        n = libwebsocket_write(session->wsi, 
-                &buf[LWS_SEND_BUFFER_PRE_PADDING], l, LWS_WRITE_TEXT);
-
-        if (n < 0) {
-            lwsl_err("NO write LWS_CALLBACK_CLIENT_WRITEABLE\n");
-            return -1;
-        }
-
-        if (n < l) {
-            lwsl_err("Partial write LWS_CALLBACK_CLIENT_WRITEABLE\n");
-            return -1;
-        }
-        fprintf(stderr, "Sent %d bytes to signaling server\n", n);
-#endif
 
         if (tmp2 == NULL) break;
         tmp1 = tmp2;
