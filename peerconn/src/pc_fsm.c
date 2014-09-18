@@ -244,17 +244,19 @@ static mb_status_t pc_data (pc_ctxt_t *ctxt, handle msg, handle param) {
     byte = *(data->buf);
 
     /* de-multiplexing data as specified in rfc 5764 sec 5.1.2 */
-    if ((byte >= 128) && (byte <= 191)) {
-        pc_utils_process_srtp_packet(ctxt, data->buf, data->buf_len);
-    } else if ((byte >= 20) && (byte <= 63)) {
+    if ((byte > 127) && (byte < 192)) {
+        status = pc_utils_process_srtp_packet(ctxt, data->buf, data->buf_len);
+    } else if ((byte > 19) && (byte < 64)) {
         int is_handshake_done;
-        dtls_srtp_session_inject_data(
+        status = dtls_srtp_session_inject_data(
                 ctxt->dtls, data->buf, data->buf_len, &is_handshake_done);
         if (is_handshake_done == 1) {
             status = pc_utils_verify_peer_fingerprint(ctxt);
         }
     } else if ((byte == 0) || (byte == 1)) {
         status = pc_utils_process_ice_msg(ctxt, data);
+    } else {
+        status = MB_INVALID_PARAMS;
     }
 
     return status;

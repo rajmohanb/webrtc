@@ -125,11 +125,11 @@ static rtcsig_fsm_handler
     {
         rtcsig_ignore_msg,
         rtcsig_ignore_msg,
-        rtcsig_ignore_msg,
+        rtcsig_ic,
         rtcsig_peer_ice,
         rtcsig_ignore_msg,
-        rtcsig_ignore_msg,
-        rtcsig_ignore_msg,
+        rtcsig_new_peer,
+        rtcsig_local_media,
         rtcsig_local_ice,
     }
 };
@@ -144,6 +144,7 @@ static mb_status_t rtcsig_local_media (
     char *sdp_buf = (char *)h_msg;
     char *ans = NULL;
     int l = 0, n;
+    static int count = 0; /* Hack! */
 
     sdp_buf[(int)h_param] = 0; /* Fix for non-utf8 characters */
     printf("Received answer to be sent of len %d: %s\n", (int)h_param, sdp_buf); 
@@ -156,8 +157,20 @@ static mb_status_t rtcsig_local_media (
     n = json_object_set_new(sdp, "type", json_string("answer"));
     if (n == -1) { printf("Failure 2\n"); } 
 
+    printf("session peer: %s\n", session->peer);
+    printf("session rcvr: %s\n", session->rcvr);
+
     data = json_object();
-    n = json_object_set_new(data, "socketId", json_string(session->peer));
+    if (count == 0) {
+        n = json_object_set_new(data, "socketId", json_string(session->peer));
+        printf("Count is now 0\n");
+        count = 1;
+    } else {
+        n = json_object_set_new(data, "socketId", json_string(session->rcvr));
+        printf("Count is now 1\n");
+        count = 0;
+    }
+
     n = json_object_set_new(data, "sdp", sdp);
 
     root = json_object();
@@ -286,7 +299,14 @@ static mb_status_t rtcsig_new_peer (
         return MB_INVALID_PARAMS;
     }
 
-    session->peer = json_string_value(peer);
+    /* Hack! */
+    if (session->peer == NULL)
+        session->peer = json_string_value(peer);
+    else
+        session->rcvr = json_string_value(peer);
+
+    printf("SESSION PEER: %s\n", session->peer);
+    printf("SESSION RCVR: %s\n", session->rcvr);
 
     return MB_OK;
 }

@@ -23,11 +23,18 @@ extern "C" {
 /******************************************************************************/
 
 
-typedef struct
-{
-    handle pc;
+typedef struct {
 
-    int bcast_fd;
+    handle pc;
+    int fd;
+    void *session;
+} rtc_participant;
+
+typedef struct {
+
+    rtc_participant tx;
+
+    rtc_participant rx;
 
 } rtc_bcast_session_t;
 

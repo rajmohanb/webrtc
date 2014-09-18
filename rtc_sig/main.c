@@ -141,7 +141,7 @@ callback_webrtc(struct libwebsocket_context *context,
             session->wsi = wsi;
             session->ringbuffer_tail = session->ringbuffer_head = 0;
 
-            session->you = session->peer = NULL;
+            session->you = session->peer = session->rcvr = NULL;
             
             libwebsocket_callback_on_writable(context, wsi);
 

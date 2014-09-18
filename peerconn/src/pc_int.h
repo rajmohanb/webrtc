@@ -114,6 +114,9 @@ mb_status_t pc_utils_process_ice_msg(pc_ctxt_t *ctxt, pc_rcvd_data_t *msg);
 
 mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt);
 
+mb_status_t pc_utils_send_media_to_peer(
+                pc_ctxt_t *ctxt, uint8_t *media, uint32_t len);
+
 
 /******************************************************************************/
 

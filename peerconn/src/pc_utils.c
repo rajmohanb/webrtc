@@ -251,16 +251,42 @@ mb_status_t pc_utils_process_srtp_packet(
     err_status_t err;
     int rtp_len = len;
 
-    fprintf(stderr, "Before Unprotect: buf %p and len %d\n", buf, rtp_len);
+    //fprintf(stderr, "Before Unprotect: buf %p and len %d\n", buf, rtp_len);
 
     err = srtp_unprotect(ctxt->srtp_in, buf, &rtp_len);
     if (err != err_status_ok) {
-        fprintf(stderr, "SRTP unprotect() "\
-                "returned error %d Starting byte %d\n", err, *buf);
+        fprintf(stderr, "SRTP unprotect() returned error %d. "\
+                "Starting byte %d. Is it RTCP?\n", err, *buf);
         return MB_INVALID_PARAMS;
     }
 
-    fprintf(stderr, "After Unprotect: buf %p and len %d\n", buf, rtp_len);
+    //fprintf(stderr, "After Unprotect: buf %p and len %d\n", buf, rtp_len);
+
+    return MB_OK;
+}
+
+
+
+mb_status_t pc_utils_send_media_to_peer(
+                pc_ctxt_t *ctxt, uint8_t *media, uint32_t len) {
+
+    err_status_t err;
+    int b, buf_len = 2048;
+    char buf[2048];
+
+    memcpy(buf, media, len);
+
+    err = srtp_protect(ctxt->srtp_in, buf, &buf_len);
+    if (err != err_status_ok) {
+        fprintf(stderr, "SRTP protect() returned error %d\n", err);
+        return MB_INVALID_PARAMS;
+    }
+
+    b = pc_send_dtls_srtp_data(NULL, buf, buf_len, ctxt);
+    if (b <= 0) {
+        fprintf(stderr, "Sending of media data to receiver node failed\n");
+        return MB_INT_ERROR;
+    }
 
     return MB_OK;
 }

@@ -177,7 +177,9 @@ mb_status_t pc_set_local_media_description(
 
 mb_status_t pc_set_remote_ice_candidate(handle peerconn, pc_ice_cand_t *cand);
 
-mb_status_t pc_inject_data(handle peerconn, pc_rcvd_data_t *data);
+mb_status_t pc_inject_received_data(handle peerconn, pc_rcvd_data_t *data);
+
+mb_status_t pc_send_media_data(handle peerconn, uint8_t *media, uint32_t len);
 
 mb_status_t pc_deinit(void);
 

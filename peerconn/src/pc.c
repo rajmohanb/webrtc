@@ -59,6 +59,9 @@ static int32_t pc_nwk_send_msg (u_char *buf, uint32_t buf_len,
     {
         sent_bytes = platform_socket_sendto(sock_fd, buf, 
                             buf_len, 0, AF_INET, port, (char *)ip_addr);
+
+        MB_LOG(LOG_SEV_DEBUG, "Sent %d bytes on socket fd %d to %s:%d\n", 
+                sent_bytes, sock_fd, ip_addr, port);
     }
     else if (ip_addr_type == STUN_INET_ADDR_IPV6)
     {
@@ -67,7 +70,7 @@ static int32_t pc_nwk_send_msg (u_char *buf, uint32_t buf_len,
     }
     else
     {
-        MB_LOG (LOG_SEV_INFO,
+        MB_LOG (LOG_SEV_CRITICAL,
                 "[ICE AGENT DEMO] Invalid IP address family type. "\
                 "Sending of STUN message failed");
     }
@@ -216,7 +219,7 @@ static void pc_session_state_change_handler(handle h_inst,
 
 
 
-static int pc_send_dtls_srtp_data (
+int pc_send_dtls_srtp_data (
             handle dtls, char *buf, int len, handle app_handle) {
 
     pc_ctxt_t *ctxt = (pc_ctxt_t *) app_handle;
@@ -437,11 +440,31 @@ mb_status_t pc_set_local_media_description(
     return pc_fsm_inject_msg(ctxt, PC_E_LOCAL_MEDIA_PARAMS, desc, NULL);
 }
 
-mb_status_t pc_inject_data(handle peerconn, pc_rcvd_data_t *data) {
+mb_status_t pc_inject_received_data(handle peerconn, pc_rcvd_data_t *data) {
 
     pc_ctxt_t *ctxt = (pc_ctxt_t *)peerconn;
 
     return pc_fsm_inject_msg(ctxt, PC_E_DATA, data, NULL);
+}
+
+mb_status_t pc_send_media_data(handle peerconn, uint8_t *media, uint32_t len) {
+
+    mb_status_t status;
+    pc_ctxt_t *ctxt = (pc_ctxt_t *)peerconn;
+
+    if (ctxt->state != PC_ACTIVE) {
+        fprintf(stderr, 
+                "Peer Connection not in active state. Current State: [%d]. "\
+                "Discarding media to be sent to peer\n", ctxt->state);
+        return MB_INVALID_PARAMS;
+    }
+
+    status = pc_utils_send_media_to_peer(ctxt, media, len);
+    if (status != MB_OK) {
+        fprintf(stderr, "Error %d while sending media data\n", status);
+    }
+
+    return status;
 }
 
 mb_status_t pc_inject_timer_event(pc_timer_event_t *event) {
@@ -449,8 +472,10 @@ mb_status_t pc_inject_timer_event(pc_timer_event_t *event) {
     int32_t status;
     handle ice_session;
 
+#if 0
     fprintf(stderr, "PC Timer fired. TimerID: %p and Arg:%p\n", 
                                             event->timer_id, event->arg);
+#endif
 
     /* this does not need to go through the pc fsm */
     status = ice_session_inject_timer_event(

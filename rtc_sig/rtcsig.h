@@ -70,6 +70,8 @@ typedef struct
     char *you;
     char *peer;
 
+    char *rcvr;
+
     int ringbuffer_head;
     int ringbuffer_tail;
     struct rtcsig_lws_message ringbuffer[MAX_MESSAGE_QUEUE];
