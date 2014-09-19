@@ -57,10 +57,12 @@ typedef enum {
 
 
 typedef enum {
+    PC_DTLS_ROLE_MIN,
     PC_DTLS_ACTIVE,
     PC_DTLS_PASSIVE,
     PC_DTLS_ACTPASS,
     PC_DTLS_HOLDCONN,
+    PC_DTLS_ROLE_MAX,
 } pc_dtls_role_t;
 
 

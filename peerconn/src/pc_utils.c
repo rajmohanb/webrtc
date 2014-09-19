@@ -189,25 +189,15 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
         return status;
     }
 
-    /* chosse a dtls role */
-    if (ctxt->peer_dtls_role == PC_DTLS_ACTPASS)
-        ctxt->my_dtls_role = PC_DTLS_ACTIVE;
-    else if (ctxt->peer_dtls_role == PC_DTLS_ACTIVE)
-        ctxt->my_dtls_role = PC_DTLS_PASSIVE;
-    else if (ctxt->peer_dtls_role == PC_DTLS_PASSIVE)
-        ctxt->my_dtls_role = PC_DTLS_ACTIVE;
-    else {
-        fprintf(stderr,"Unsupported Peer DTLS Role %d\n", ctxt->peer_dtls_role);
-        return MB_INT_ERROR;
-    }
-
     if (ctxt->my_dtls_role == PC_DTLS_ACTIVE) {
+
         /* client */
         ctxt->local_key = ctxt->keying_material;
         ctxt->peer_key = ctxt->local_key + SRTP_KEY_LEN;
         ctxt->local_salt = ctxt->peer_key + SRTP_KEY_LEN;
         ctxt->peer_salt = ctxt->local_salt + SRTP_SALT_LEN;
     } else if (ctxt->my_dtls_role == PC_DTLS_PASSIVE) {
+
         /* server */
         ctxt->peer_key = ctxt->keying_material;
         ctxt->local_key = ctxt->local_key + SRTP_KEY_LEN;
@@ -220,13 +210,33 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
 
     memset(&in_policy_key, 0, sizeof(in_policy_key));
 
-    /* setup srtp sessions */
+    /* setup srtp session(s) */
     crypto_policy_set_rtp_default(&ctxt->in_policy.rtp);
     crypto_policy_set_rtcp_default(&ctxt->in_policy.rtcp);
-    ctxt->in_policy.ssrc.type = ssrc_any_inbound;
-    ctxt->in_policy.key = in_policy_key;
-    memcpy(ctxt->in_policy.key, ctxt->peer_key, SRTP_KEY_LEN);
-    memcpy((ctxt->in_policy.key+SRTP_KEY_LEN), ctxt->peer_salt, SRTP_SALT_LEN);
+
+    if (ctxt->dir == PC_MEDIA_RECVONLY) {
+
+        printf("PEERCONN MEDIA DIRECTION: RECVONLY\n");
+        ctxt->in_policy.ssrc.type = ssrc_any_inbound;
+        ctxt->in_policy.key = in_policy_key;
+        memcpy(ctxt->in_policy.key, ctxt->peer_key, SRTP_KEY_LEN);
+        memcpy((ctxt->in_policy.key+SRTP_KEY_LEN), ctxt->peer_salt, SRTP_SALT_LEN);
+    } else if (ctxt->dir == PC_MEDIA_SENDONLY) {
+
+        printf("PEERCONN MEDIA DIRECTION: SENDONLY\n");
+        /* TODO; rename generic as media_policy? */
+        ctxt->in_policy.ssrc.type = ssrc_any_outbound;
+        ctxt->in_policy.key = in_policy_key;
+        memcpy(ctxt->in_policy.key, ctxt->local_key, SRTP_KEY_LEN);
+        memcpy((ctxt->in_policy.key+SRTP_KEY_LEN), 
+                ctxt->local_salt, SRTP_SALT_LEN);
+    } else {
+
+        fprintf(stderr, 
+                "We do not support this media direction %d. TODO\n", ctxt->dir);
+        return MB_NOT_SUPPORTED;
+    }
+
     ctxt->in_policy.window_size = 1024;  /* optimal value? */
     ctxt->in_policy.allow_repeat_tx = 0; /* TODO; Chrome sets it to 1? */
     ctxt->in_policy.next = NULL;

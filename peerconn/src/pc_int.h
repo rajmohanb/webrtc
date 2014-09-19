@@ -57,6 +57,8 @@ typedef struct {
     handle ice_session;
     handle media;
 
+    pc_media_dir_t dir;
+
 #if 0
     pc_ice_media_host_comp_t host_cands[PC_ICE_MAX_HOST_CANDS];
 #endif
@@ -113,6 +115,9 @@ mb_status_t pc_utils_make_udp_transport_connected(pc_ctxt_t *ctxt);
 mb_status_t pc_utils_process_ice_msg(pc_ctxt_t *ctxt, pc_rcvd_data_t *msg);
 
 mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt);
+
+mb_status_t pc_utils_process_srtp_packet(
+                    pc_ctxt_t *ctxt, uint8_t *buf, uint32_t len);
 
 mb_status_t pc_utils_send_media_to_peer(
                 pc_ctxt_t *ctxt, uint8_t *media, uint32_t len);

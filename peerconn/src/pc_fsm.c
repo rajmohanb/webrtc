@@ -162,6 +162,8 @@ static mb_status_t pc_init_ice (pc_ctxt_t *ctxt, handle msg, handle param) {
         return MB_INT_ERROR;
     }
 
+    ctxt->dir = desc->dir;
+
     ctxt->state = PC_ICE_IN_PROGRESS;
 
     return MB_OK;
@@ -202,6 +204,18 @@ static mb_status_t pc_peer_media (pc_ctxt_t *ctxt, handle msg, handle param) {
                 peer_desc->fp_key, MAX_DTLS_FINGERPRINT_KEY_LEN);
     ctxt->peer_dtls_role = peer_desc->role;
     ctxt->dtls_key_type = peer_desc->dtls_key_type;
+
+    /* choose a dtls role for this session */
+    if (ctxt->peer_dtls_role == PC_DTLS_ACTPASS)
+        ctxt->my_dtls_role = PC_DTLS_ACTIVE;
+    else if (ctxt->peer_dtls_role == PC_DTLS_ACTIVE)
+        ctxt->my_dtls_role = PC_DTLS_PASSIVE;
+    else if (ctxt->peer_dtls_role == PC_DTLS_PASSIVE)
+        ctxt->my_dtls_role = PC_DTLS_ACTIVE;
+    else {
+        fprintf(stderr,"Unsupported Peer DTLS Role %d\n", ctxt->peer_dtls_role);
+        return MB_INT_ERROR;
+    }
 
     memcpy(peer_params.media[0].ice_ufrag, 
             peer_desc->ice_ufrag, PC_ICE_MAX_UFRAG_LEN);
@@ -278,7 +292,7 @@ static mb_status_t pc_init_dtls (pc_ctxt_t *ctxt, handle msg, handle param) {
     /* initiate dlts srtp session */
     /* TODO; hard coded SHA 256 */
     status = dtls_srtp_create_session(
-            DTLS_ACTIVE, DTLS_SHA256, ctxt->sock_fd, ctxt, &ctxt->dtls);
+            ctxt->my_dtls_role, DTLS_SHA256, ctxt->sock_fd, ctxt, &ctxt->dtls);
     if (status != MB_OK) {
         fprintf(stderr, "Error while creating DTLS-SRTP session: %d\n", status);
         return status;

@@ -35,6 +35,7 @@
 static rtc_bcast_session_t g_session; /* the lone global session */
 static pc_local_media_desc_t local_desc;
 static int g_ready = 0;
+static uint32_t g_audio_ssrc, g_video_ssrc, g_app_ssrc;
 
 static int g_epfd, g_sigfd, g_timerfd;
 
@@ -288,6 +289,18 @@ mb_status_t mb_extract_pc_params_from_sdp(
             else if (strncasecmp(attr->a_name, "ice-options", 11) == 0) {
                 strncpy(pc_media->ice_options, attr->a_value, PC_ICE_OPTIONS_LEN);
             }
+            else if (strncasecmp(attr->a_name, "ssrc", 4) == 0) {
+                /* Hack!! */
+                if (g_ready == 0) {
+                    /* extract the ssrc parameters from broadcaster offer */
+                    if (media->m_type == sdp_media_audio)
+                        g_audio_ssrc = (uint32_t) strtoul(attr->a_value, NULL, 10);
+                    else if (media->m_type == sdp_media_video)
+                        g_video_ssrc = (uint32_t) strtoul(attr->a_value, NULL, 10);
+                    else
+                        g_app_ssrc = (uint32_t) strtoul(attr->a_value, NULL, 10);
+                }
+            }
             else if (strncasecmp(attr->a_name, "fingerprint", 11) == 0) {
 
                 /* TODO: should use strtok_r */
@@ -305,14 +318,6 @@ mb_status_t mb_extract_pc_params_from_sdp(
                 while((token = strtok(NULL, " "))) {
                 
                     strncpy(pc_media->fp_key, token, MAX_DTLS_FINGERPRINT_KEY_LEN);
-#if 0
-                    int i = 0;
-                    while(*token) {
-                        if (*token == ':') { token++; continue;}
-                        pc_media->fp_key[i] = *token;
-                        token++; i++;
-                    }
-#endif
                 }
 
             }
@@ -427,6 +432,12 @@ mb_status_t mb_create_local_pc_description(
         if (i >= MAX_DTLS_FINGERPRINT_KEY_LEN) break;
     }
 
+    /* Hack! */
+    if (g_ready == 0)
+        desc->dir = PC_MEDIA_RECVONLY;
+    else
+        desc->dir = PC_MEDIA_SENDONLY;
+
 #if 0
     if (platform_get_random_data(
                 (uint8_t *)desc->ice_ufrag, PC_ICE_MAX_UFRAG_LEN) == false) {
@@ -480,7 +491,6 @@ mb_status_t mb_create_local_pc_description(
         return 1;
     }
 
-    //g_session.rx.fd = new_fd;
     *fd = new_fd;
 
     return MB_OK;
@@ -601,6 +611,12 @@ mb_status_t mb_create_send_answer(pc_local_media_desc_t *l, ice_cand_params_t *c
             else if (strncasecmp(attr->a_name, "ice-pwd", 7) == 0) {
                 /* free existing 'attr->a_value' string, memleak? */
                 attr->a_value = strdup(l->ice_pwd);
+            }
+            else if (strncasecmp(attr->a_name, "ssrc", 4) == 0) {
+
+                //char *token = strtok((char *)attr->a_value, " ");
+                printf("SSRC ATTRIBUTES: %s\n", attr->a_value);
+
             }
             else if (strncasecmp(attr->a_name, "fingerprint", 11) == 0) {
 
