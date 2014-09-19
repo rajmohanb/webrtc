@@ -35,7 +35,8 @@
 
 /* global pc instance */
 pc_instance_t g_pc;
-static pc_ice_candidates_cb pc_ice_cb;
+static pc_ice_candidates_cb pc_ice_cb; /* TODO;move this into global instance */
+pc_ic_media_data_cb pc_media_cb; /* TODO; move this into global instance */
 
 
 static char *ice_states[] =
@@ -227,7 +228,7 @@ int pc_send_dtls_srtp_data (
             (struct sockaddr *)&ctxt->peer_addr, sizeof(struct sockaddr));
     if (bytes == -1) {
         perror("sendto ");
-        fprintf(stderr, "Error when sending DTLS data on socket\n");
+        fprintf(stderr, "Error when sending DTLS data of size %d on socket\n", len);
         return bytes;
     }
 
@@ -243,7 +244,7 @@ int pc_send_dtls_srtp_data (
 
 
 
-mb_status_t pc_init(pc_ice_candidates_cb ice_cb) {
+mb_status_t pc_init(pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb) {
 
     mb_status_t status;
     int32_t ice_status;
@@ -313,6 +314,7 @@ mb_status_t pc_init(pc_ice_candidates_cb ice_cb) {
 
 
     pc_ice_cb = ice_cb;
+    pc_media_cb = ic_media_cb;
 
     return MB_OK;
 

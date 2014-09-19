@@ -576,6 +576,9 @@ mb_status_t mb_create_send_answer(pc_local_media_desc_t *l, ice_cand_params_t *c
 
     /* now update the sdp with local media description */
     for(media = sdp->sdp_media; media; media = media->m_next) {
+
+        /* Hack! */
+        if (g_ready == 1) media->m_mode = sdp_sendonly;
         for(attr = media->m_attributes; attr; attr = attr->a_next) {
             
             //printf("%s: [%s]\n", attr->a_name, attr->a_value);
@@ -966,6 +969,23 @@ mb_status_t rtcmedia_setup_timer_socket(void) {
 
 
 
+void pc_incoming_media(handle pc, uint8_t *buf, uint32_t len) {
+
+    mb_status_t status;
+
+    if (!g_session.tx.pc) return;
+
+    /* pipe it to the other peerconnection */
+    status = pc_send_media_data(g_session.tx.pc, buf, len);
+    if (status != MB_OK) {
+        fprintf(stderr, "Sending of broadcast media of len [%d] to receiver failed\n", len);
+    }
+
+    return;
+}
+
+
+
 int main(int argc, char **argv) {
 
     mb_status_t status;
@@ -1011,7 +1031,7 @@ int main(int argc, char **argv) {
     /* init the media protocol library - not required for sofia sdp */
 
     /* init peerconn module */
-    status = pc_init(pc_ice_handler);
+    status = pc_init(pc_ice_handler, pc_incoming_media);
     if (status != MB_OK) {
         printf("Unable to initialize peerconn library: %d\n", status);
         return -1;

@@ -40,6 +40,7 @@
 
 
 extern pc_instance_t g_pc;
+extern pc_ic_media_data_cb pc_media_cb;
 
 
 mb_status_t pc_utils_process_ice_msg(pc_ctxt_t *ctxt, pc_rcvd_data_t *msg) {
@@ -262,6 +263,9 @@ mb_status_t pc_utils_process_srtp_packet(
 
     //fprintf(stderr, "After Unprotect: buf %p and len %d\n", buf, rtp_len);
 
+    /* hand over the clear rtp packets to application */
+    pc_media_cb(ctxt, buf, (uint32_t)rtp_len);
+
     return MB_OK;
 }
 
@@ -271,10 +275,11 @@ mb_status_t pc_utils_send_media_to_peer(
                 pc_ctxt_t *ctxt, uint8_t *media, uint32_t len) {
 
     err_status_t err;
-    int b, buf_len = 2048;
-    char buf[2048];
+    int b, buf_len = len;
+    char buf[2048] = {0};
 
     memcpy(buf, media, len);
+    printf("Copied media data of len %d to stack mem\n", len);
 
     err = srtp_protect(ctxt->srtp_in, buf, &buf_len);
     if (err != err_status_ok) {
