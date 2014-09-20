@@ -289,7 +289,7 @@ mb_status_t pc_utils_send_media_to_peer(
     char buf[2048] = {0};
 
     memcpy(buf, media, len);
-    printf("Copied media data of len %d to stack mem\n", len);
+    //printf("Copied media data of len %d to stack mem\n", len);
 
     err = srtp_protect(ctxt->srtp_in, buf, &buf_len);
     if (err != err_status_ok) {

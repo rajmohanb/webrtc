@@ -35,7 +35,7 @@
 static rtc_bcast_session_t g_session; /* the lone global session */
 static pc_local_media_desc_t local_desc;
 static int g_ready = 0;
-static uint32_t g_audio_ssrc, g_video_ssrc, g_app_ssrc;
+static uint32_t g_audio_ssrc, g_video_ssrc1, g_video_ssrc2, g_app_ssrc;
 
 static int g_epfd, g_sigfd, g_timerfd;
 
@@ -289,6 +289,17 @@ mb_status_t mb_extract_pc_params_from_sdp(
             else if (strncasecmp(attr->a_name, "ice-options", 11) == 0) {
                 strncpy(pc_media->ice_options, attr->a_value, PC_ICE_OPTIONS_LEN);
             }
+            else if (strncasecmp(attr->a_name, "ssrc-group", 10) == 0) {
+                if (media->m_type == sdp_media_video) {
+                    char *token = strtok((char *)attr->a_value, " ");
+
+                    token = strtok(NULL, " ");
+                    g_video_ssrc1 = (uint32_t) strtoul(token, NULL, 10);
+
+                    token = strtok(NULL, "\r\n");
+                    g_video_ssrc2 = (uint32_t) strtoul(token, NULL, 10);
+                }
+            }
             else if (strncasecmp(attr->a_name, "ssrc", 4) == 0) {
                 /* Hack!! */
                 if (g_ready == 0) {
@@ -296,7 +307,8 @@ mb_status_t mb_extract_pc_params_from_sdp(
                     if (media->m_type == sdp_media_audio)
                         g_audio_ssrc = (uint32_t) strtoul(attr->a_value, NULL, 10);
                     else if (media->m_type == sdp_media_video)
-                        g_video_ssrc = (uint32_t) strtoul(attr->a_value, NULL, 10);
+                        //g_video_ssrc1 = (uint32_t) strtoul(attr->a_value, NULL, 10);
+                        printf("");
                     else
                         g_app_ssrc = (uint32_t) strtoul(attr->a_value, NULL, 10);
                 }
@@ -567,6 +579,7 @@ mb_status_t mb_create_send_answer(pc_local_media_desc_t *l, ice_cand_params_t *c
     sdp_media_t *media;
     sdp_attribute_t *attr;
     sdp_printer_t *printer;
+    int video_ssrc_attr_count = 0;
 
     /* read sdp template from file */
     read_sdp_from_file("mb_answer", sdp_buf, (int *)&sdpbuf_len);
@@ -612,11 +625,35 @@ mb_status_t mb_create_send_answer(pc_local_media_desc_t *l, ice_cand_params_t *c
                 /* free existing 'attr->a_value' string, memleak? */
                 attr->a_value = strdup(l->ice_pwd);
             }
+            else if (strncasecmp(attr->a_name, "ssrc-group", 10) == 0) {
+                char line[150] = {0};
+                sprintf(line, "FID %u %u", g_video_ssrc1, g_video_ssrc2);
+
+                attr->a_value = strdup(line);
+            }
             else if (strncasecmp(attr->a_name, "ssrc", 4) == 0) {
 
-                //char *token = strtok((char *)attr->a_value, " ");
-                printf("SSRC ATTRIBUTES: %s\n", attr->a_value);
+                char line[150] = {0};
+                char *t = attr->a_value;
+                while(*t != 32) t++;
 
+                t++;
+
+                if (media->m_type == sdp_media_audio)
+                    sprintf(line, "%u %s", g_audio_ssrc, t);
+                else if (media->m_type == sdp_media_video) {
+
+                    if (video_ssrc_attr_count < 4)
+                        sprintf(line, "%u %s", g_video_ssrc1, t);
+                    else
+                        sprintf(line, "%u %s", g_video_ssrc2, t);
+
+                    video_ssrc_attr_count++;
+                }
+                else
+                    sprintf(line, "%u %s", g_app_ssrc, t);
+
+                attr->a_value = strdup(line);
             }
             else if (strncasecmp(attr->a_name, "fingerprint", 11) == 0) {
 

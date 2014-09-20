@@ -237,7 +237,7 @@ int pc_send_dtls_srtp_data (
                 "socket [%d] less than given size [%d]\n", bytes, len);
     }
 
-    fprintf(stderr, "[PC] Sent %d bytes of DTLS_SRTP data\n", bytes);
+    //fprintf(stderr, "[PC] Sent %d bytes of DTLS_SRTP data\n", bytes);
 
     return bytes;
 }
