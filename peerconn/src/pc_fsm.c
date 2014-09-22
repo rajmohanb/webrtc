@@ -156,7 +156,7 @@ static mb_status_t pc_init_ice (pc_ctxt_t *ctxt, handle msg, handle param) {
 
     /* initiate ice gathering */
     ice_status = ice_session_gather_candidates(
-            g_pc.ice_instance, ctxt->ice_session, true); 
+            g_pc.ice_instance, ctxt->ice_session, false); 
     if (ice_status != STUN_OK) {
         MB_LOG(MBLOG_ERROR, "ICE gathering returned error %d\n", ice_status);
         return MB_INT_ERROR;

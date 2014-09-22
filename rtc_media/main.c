@@ -246,7 +246,7 @@ mb_status_t mb_extract_appended_ice_candidates_from_sdp(sdp_session_t *sdp) {
 
             if (strncasecmp(attr->a_name, "candidate", 9) == 0) {
                 char icedesc[128] = {0};
-                printf("Candidate attribute received: Len %d TODO %s\n", 
+                printf("Candidate attribute received: Len %d : %s\n", 
                                     strlen(attr->a_value), attr->a_value);
                 snprintf(icedesc, 128, "a=candidate:%s", attr->a_value);
                 rtcmedia_process_ice_description(icedesc, strlen(icedesc));
