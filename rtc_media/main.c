@@ -39,6 +39,7 @@ static uint32_t g_audio_ssrc, g_video_ssrc1, g_video_ssrc2, g_app_ssrc;
 
 static int g_epfd, g_sigfd, g_timerfd;
 
+//static char local_ip[48] = "192.168.0.149";
 static char local_ip[48] = "10.1.71.170";
 static mb_log_level_t g_log_sev = MBLOG_ERROR;
 static char cert_fp[] = "62:90:01:9c:2b:f3:1a:31:8b:f9:b9:7e:11:b3:41:77:e9:e2:46:8e:d5:8c:a4:a8:62:38:ef:38:e5:20:e5:fa";
@@ -430,6 +431,8 @@ mb_status_t mb_create_local_pc_description(
     int ret, new_fd, port;
     char *fp = cert_fp;
     struct epoll_event event;
+    unsigned char temp[16] = {0};
+    unsigned char *ptr;
 
     memset(desc, 0, sizeof(pc_media_desc_t));
 
@@ -450,19 +453,27 @@ mb_status_t mb_create_local_pc_description(
     else
         desc->dir = PC_MEDIA_SENDONLY;
 
-#if 0
-    if (platform_get_random_data(
-                (uint8_t *)desc->ice_ufrag, PC_ICE_MAX_UFRAG_LEN) == false) {
+#if 1
+    if (platform_get_random_data(temp, 16) == false) {
 
         printf("Generating random ice username failed\n");
         return MB_INT_ERROR;
     }
 
-    if (platform_get_random_data(
-                (uint8_t *)desc->ice_pwd, PC_ICE_MAX_PWD_LEN) == false) {
+    ptr = desc->ice_ufrag;
+    for (i = 0; i < 8; i++, ptr += 2) {
+        sprintf(ptr, "%02x", temp[i]);
+    }
+
+    if (platform_get_random_data(temp, 16) == false) {
 
         printf("Generating random ice password failed\n");
         return MB_INT_ERROR;
+    }
+
+    ptr = desc->ice_pwd;
+    for (i = 0; i < 12; i++, ptr += 2) {
+        sprintf(ptr, "%02x", temp[i]);
     }
 #else
     strncpy(desc->ice_ufrag, "jsdf7uy7fs7a347fres7", PC_ICE_MAX_UFRAG_LEN);
