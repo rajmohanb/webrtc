@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <sys/time.h>
 #include <sys/epoll.h>
+#include <ifaddrs.h>
 
 #include <sdp.h>
 
@@ -39,8 +40,7 @@ static uint32_t g_audio_ssrc, g_video_ssrc1, g_video_ssrc2, g_app_ssrc;
 
 static int g_epfd, g_sigfd, g_timerfd;
 
-//static char local_ip[48] = "192.168.0.149";
-static char local_ip[48] = "10.1.71.170";
+static char g_local_ip[48] = {0};
 static mb_log_level_t g_log_sev = MBLOG_ERROR;
 static char cert_fp[] = "62:90:01:9c:2b:f3:1a:31:8b:f9:b9:7e:11:b3:41:77:e9:e2:46:8e:d5:8c:a4:a8:62:38:ef:38:e5:20:e5:fa";
 static char *log_levels[] =
@@ -126,6 +126,40 @@ static void read_sdp_from_file(char *filename, char *buf, int *buf_len) {
 
     *buf_len = bytes;
     return;
+}
+
+
+static int32_t rtc_media_get_local_ip(char *ip_buf, int buf_len) {
+
+    struct ifaddrs *ifAddrStruct = NULL;
+    struct ifaddrs * ifa = NULL;
+    int s, count = 0;
+    mb_status_t status = MB_TRANSPORT_FAIL;
+
+    getifaddrs(&ifAddrStruct);
+
+    for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next)
+    {
+        if (strncmp(ifa->ifa_name, "lo", 2) == 0) continue;
+        if (!ifa->ifa_addr) continue;
+
+        /* Note: we consider only the first available IPv4 address now */
+        if (ifa->ifa_addr->sa_family == AF_INET) {
+            /* copy the address */
+            if (inet_ntop(AF_INET,
+                    (void *)&(((struct sockaddr_in *)ifa->ifa_addr)->sin_addr),
+                    ip_buf, buf_len)) {
+                status = MB_OK;
+                break;
+            }
+        } else if (ifa->ifa_addr->sa_family==AF_INET6) {
+            printf("Ignoring IPv6 address\n");
+        }
+    }
+
+    if (ifAddrStruct != NULL) freeifaddrs(ifAddrStruct);
+
+    return status;
 }
 
 
@@ -309,7 +343,7 @@ mb_status_t mb_extract_pc_params_from_sdp(
                         g_audio_ssrc = (uint32_t) strtoul(attr->a_value, NULL, 10);
                     else if (media->m_type == sdp_media_video)
                         //g_video_ssrc1 = (uint32_t) strtoul(attr->a_value, NULL, 10);
-                        printf("");
+                        ;
                     else
                         g_app_ssrc = (uint32_t) strtoul(attr->a_value, NULL, 10);
                 }
@@ -429,10 +463,9 @@ mb_status_t mb_create_local_pc_description(
 
     uint32_t i = 0;
     int ret, new_fd, port;
-    char *fp = cert_fp;
+    char *ptr, *fp = cert_fp;
     struct epoll_event event;
     unsigned char temp[16] = {0};
-    unsigned char *ptr;
 
     memset(desc, 0, sizeof(pc_media_desc_t));
 
@@ -485,7 +518,7 @@ mb_status_t mb_create_local_pc_description(
 
     new_fd = mb_get_local_bound_port(&port);
 
-    strcpy((char *)desc->host_cands[0].addr.ip_addr, local_ip);
+    strcpy((char *)desc->host_cands[0].addr.ip_addr, g_local_ip);
     desc->host_cands[0].addr.port = port;
     desc->host_cands[0].addr.host_type = MB_INET_ADDR_IPV4;
 
@@ -1055,6 +1088,12 @@ int main(int argc, char **argv) {
     mb_status_t status;
     int ret, i, n;
     struct epoll_event event, *events;
+
+    status = rtc_media_get_local_ip(g_local_ip, 48);
+    if (status != MB_OK) {
+        fprintf(stderr, "Error: Unable to determine local interface IP addr\n");
+        return 1;
+    }
 
     g_sigfd = rtcmedia_connect_to_signaling_server();
     if (g_sigfd == 0) {
