@@ -56,6 +56,20 @@ static char *log_levels[] =
 };
 
 
+typedef struct {
+
+    unsigned int version:2;
+    unsigned int p:1;
+    unsigned int x:1;
+    unsigned int cc:4;
+    unsigned int m:1;
+    unsigned int pt:7;
+    unsigned int seqno:16;
+    unsigned int ts;
+    unsigned int ssrc;
+} rtc_media_rtp_hdr_t;
+
+
 void app_log(stun_log_level_t level,
         char *file_name, uint32_t line_num, char *format, ...)
 {
@@ -325,14 +339,19 @@ mb_status_t mb_extract_pc_params_from_sdp(
                 strncpy(pc_media->ice_options, attr->a_value, PC_ICE_OPTIONS_LEN);
             }
             else if (strncasecmp(attr->a_name, "ssrc-group", 10) == 0) {
-                if (media->m_type == sdp_media_video) {
-                    char *token = strtok((char *)attr->a_value, " ");
 
-                    token = strtok(NULL, " ");
-                    g_video_ssrc1 = (uint32_t) strtoul(token, NULL, 10);
+                /* Hack! extract only for the broadcaster */
+                if (g_ready == 0) {
 
-                    token = strtok(NULL, "\r\n");
-                    g_video_ssrc2 = (uint32_t) strtoul(token, NULL, 10);
+                    if (media->m_type == sdp_media_video) {
+                        char *token = strtok((char *)attr->a_value, " ");
+
+                        token = strtok(NULL, " ");
+                        g_video_ssrc1 = (uint32_t) strtoul(token, NULL, 10);
+
+                        token = strtok(NULL, "\r\n");
+                        g_video_ssrc2 = (uint32_t) strtoul(token, NULL, 10);
+                    }
                 }
             }
             else if (strncasecmp(attr->a_name, "ssrc", 4) == 0) {
@@ -456,6 +475,7 @@ int mb_get_local_bound_port(int *port) {
     *port = i;
     return sockfd;
 }
+
 
 
 mb_status_t mb_create_local_pc_description(
@@ -613,8 +633,9 @@ mb_status_t mb_create_send_trickle_ice_candidate(ice_cand_params_t *c) {
 
 
 
-mb_status_t mb_create_send_answer(pc_local_media_desc_t *l, ice_cand_params_t *c)
-{
+mb_status_t mb_create_send_answer(
+                            pc_local_media_desc_t *l, ice_cand_params_t *c) {
+
     sdp_parser_t *parser = NULL;
     su_home_t home[1] = { SU_HOME_INIT(home) };
     sdp_session_t *sdp;
@@ -751,9 +772,7 @@ mb_status_t mb_create_send_answer(pc_local_media_desc_t *l, ice_cand_params_t *c
 
         /* TODO; is it possible, less size data is sent? loop? */
         printf("Sent Answer to Signaling of Size: %d\n", size);
-    }
-    else
-    {
+    } else {
         fprintf(stderr, "Error while forming the SDP message\n");
         return MB_INT_ERROR;
     }

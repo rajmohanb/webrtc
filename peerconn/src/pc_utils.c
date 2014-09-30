@@ -157,7 +157,7 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
 
     /* string compare if failing! need to format the string for comparision */
     for (i = 0; i < len; i++) {
-        ptr += sprintf(ptr, "%.2X:", peer_fp[i]);
+        ptr += sprintf(ptr, "%02X:", peer_fp[i]);
     }
     ptr--; *ptr = 0;
 
@@ -261,14 +261,29 @@ mb_status_t pc_utils_process_srtp_packet(
 
     err_status_t err;
     int rtp_len = len;
+    uint32_t pt;
 
     //fprintf(stderr, "Before Unprotect: buf %p and len %d\n", buf, rtp_len);
+    pt = (uint32_t) *(buf+1); 
+    //fprintf(stderr, "Payload Type: %d\n", pt);
 
-    err = srtp_unprotect(ctxt->srtp_in, buf, &rtp_len);
-    if (err != err_status_ok) {
-        fprintf(stderr, "SRTP unprotect() returned error %d. "\
-                "Starting byte %d. Is it RTCP?\n", err, *buf);
-        return MB_INVALID_PARAMS;
+    if ((pt > 191) && (pt < 210)) {
+
+        err = srtp_unprotect_rtcp(ctxt->srtp_in, buf, &rtp_len);
+        if (err != err_status_ok) {
+            fprintf(stderr, "SRTCP unprotect() returned error %d. Starting "\
+                    "byte %d. Payload type byte: %d Context: %p\n", err, *buf, pt, ctxt);
+            return MB_INVALID_PARAMS;
+        }
+
+    } else {
+
+        err = srtp_unprotect(ctxt->srtp_in, buf, &rtp_len);
+        if (err != err_status_ok) {
+            fprintf(stderr, "SRTP unprotect() returned error %d. "\
+                    "Starting byte %d. Is it RTCP?\n", err, *buf);
+            return MB_INVALID_PARAMS;
+        }
     }
 
     //fprintf(stderr, "After Unprotect: buf %p and len %d\n", buf, rtp_len);
