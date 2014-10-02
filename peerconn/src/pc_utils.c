@@ -271,11 +271,14 @@ mb_status_t pc_utils_process_srtp_packet(
 
         err = srtp_unprotect_rtcp(ctxt->srtp_in, buf, &rtp_len);
         if (err != err_status_ok) {
-            fprintf(stderr, "SRTCP unprotect() returned error %d. Starting "\
+            /* Hack! to reduce console printf for now, to be removed later TODO */
+            if (ctxt->dir == PC_MEDIA_RECVONLY)
+                fprintf(stderr, "SRTCP unprotect() returned error %d. Starting "\
                     "byte %d. Payload type byte: %d Context: %p\n", err, *buf, pt, ctxt);
             return MB_INVALID_PARAMS;
         }
 
+        //fprintf(stderr, "RX RTCP Payload Type: %d Len: %d\n", pt, rtp_len);
     } else {
 
         err = srtp_unprotect(ctxt->srtp_in, buf, &rtp_len);
@@ -302,14 +305,33 @@ mb_status_t pc_utils_send_media_to_peer(
     err_status_t err;
     int b, buf_len = len;
     char buf[2048] = {0};
+    uint32_t pt;
+
+    /* 
+     * determine if its rtp or rtcp based on payload type. 
+     * can't application pass the type?
+     */
+    pt = (uint32_t) *(media+1); 
 
     memcpy(buf, media, len);
     //printf("Copied media data of len %d to stack mem\n", len);
+    
+    //fprintf(stderr, "TX Payload Type: %d Len: %d\n", pt, len);
+    if ((pt > 191) && (pt < 210)) {
 
-    err = srtp_protect(ctxt->srtp_in, buf, &buf_len);
-    if (err != err_status_ok) {
-        fprintf(stderr, "SRTP protect() returned error %d\n", err);
-        return MB_INVALID_PARAMS;
+        err = srtp_protect_rtcp(ctxt->srtp_in, buf, &buf_len);
+        if (err != err_status_ok) {
+            fprintf(stderr, "SRTP protect() for RTCP returned error %d\n", err);
+            return MB_INVALID_PARAMS;
+        }
+        //fprintf(stderr, "SRTP protected RTCP packet Type: %d Len: %d\n", pt, buf_len);
+    } else {
+
+        err = srtp_protect(ctxt->srtp_in, buf, &buf_len);
+        if (err != err_status_ok) {
+            fprintf(stderr, "SRTP protect() for RTP returned error %d\n", err);
+            return MB_INVALID_PARAMS;
+        }
     }
 
     b = pc_send_dtls_srtp_data(NULL, buf, buf_len, ctxt);
