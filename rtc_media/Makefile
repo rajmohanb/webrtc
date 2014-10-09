@@ -27,7 +27,7 @@ MB_WEBRTC_LIBS := ../peerconn/src/libpc.a ../ext_libs/libs/libsdp.a \
 	../ext_libs/libs/lib_stun_txn.a ../ext_libs/libs/lib_stun_encdec.a \
 	../ext_libs/libs/lib_stun_msg.a ../ext_libs/libs/lib_stun_binding.a \
 	../ext_libs/libs/lib_platform.a ../ext_libs/libs/libsrtp.a \
-	-lssl -lcrypto -lm -lrt -ldl -lpthread
+	-lssl -lcrypto -ljansson -lm -lrt -ldl -lpthread
 
 CFLAGS += -g -Wall -Wstrict-prototypes -c $(INCLUDE) -DLINUX
 

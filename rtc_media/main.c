@@ -12,6 +12,8 @@
 
 #include <sdp.h>
 
+#include <jansson.h>
+
 #include <platform_api.h>
 
 #include <mb_types.h>
@@ -37,6 +39,8 @@ static rtc_bcast_session_t g_session; /* the lone global session */
 static pc_local_media_desc_t local_desc;
 static int g_ready = 0;
 static uint32_t g_audio_ssrc, g_video_ssrc1, g_video_ssrc2, g_app_ssrc;
+
+static sdp_session_t *b_sdp;
 
 static int g_epfd, g_sigfd, g_timerfd;
 
@@ -263,10 +267,11 @@ mb_status_t rtcmedia_process_ice_description(char *buf, int len) {
             continue;
         }
 
-        if (g_ready == 0)
+        if (g_ready == 0) {
             pc_handle = g_session.rx.pc;
-        else
+        } else {
             pc_handle = g_session.tx.pc;
+        }
 
         /* TODO; Hack!!!! */
         if (pc_handle == 0) pc_handle = g_session.rx.pc;
@@ -632,6 +637,9 @@ mb_status_t mb_create_send_trickle_ice_candidate(ice_cand_params_t *c) {
 }
 
 
+static sdp_attribute_t a0 = 
+{ sizeof(a0), NULL, "candidate", "1000584449 1 udp 2122260223 10.1.71.170 33003 typ host"};
+
 
 mb_status_t mb_create_send_answer(
                             pc_local_media_desc_t *l, ice_cand_params_t *c) {
@@ -646,6 +654,7 @@ mb_status_t mb_create_send_answer(
     sdp_printer_t *printer;
     int video_ssrc_attr_count = 0;
 
+#if 0
     /* read sdp template from file */
     read_sdp_from_file("mb_answer", sdp_buf, (int *)&sdpbuf_len);
     if (sdpbuf_len == 0) {
@@ -657,6 +666,8 @@ mb_status_t mb_create_send_answer(
     parser = sdp_parse(home, sdp_buf, sdpbuf_len, 0);
 
     sdp = sdp_session(parser);
+#endif
+    sdp = sdp_session_dup(home, b_sdp);
     if (sdp == NULL) {
         printf("SDP parsing error: %s\n", sdp_parsing_error(parser));
         return MB_INVALID_PARAMS;
@@ -665,8 +676,30 @@ mb_status_t mb_create_send_answer(
     /* now update the sdp with local media description */
     for(media = sdp->sdp_media; media; media = media->m_next) {
 
+        /* remove ice-options */
+        sdp_attribute_t *iceopt = sdp_attribute_remove(&media->m_attributes, "ice-options");
+
+        /* append ice host candidate */
+        sdp_attribute_append(&media->m_attributes, &a0);
+
+        /* Hack! for chrome draft-ietf-rtcweb-jsep-07 sec 5.2.2 */
+        if (g_ready == 0) {
+            sdp_attribute_t *attr;
+
+            attr = sdp_attribute_remove(&media->m_attributes, "msid");
+            attr = sdp_attribute_remove(&media->m_attributes, "ssrc-group");
+
+            do {
+                attr = sdp_attribute_remove(&media->m_attributes, "ssrc");
+            } while(attr);
+        }
+        
         /* Hack! */
-        if (g_ready == 1) media->m_mode = sdp_sendonly;
+        if (g_ready == 1) {
+            media->m_mode = sdp_sendonly;
+        } else {
+            media->m_mode = sdp_recvonly;
+        }
         for(attr = media->m_attributes; attr; attr = attr->a_next) {
             
             //printf("%s: [%s]\n", attr->a_name, attr->a_value);
@@ -747,6 +780,11 @@ mb_status_t mb_create_send_answer(
                 /* free existing 'attr->a_value' string, memleak? */
                 attr->a_value = strdup(fp);
             }
+            else if (strncasecmp(attr->a_name, "setup", 5) == 0) {
+
+                /* for everyone, we are dtls client? */
+                attr->a_value = strdup("active");
+            }
         }
     }
 
@@ -799,6 +837,7 @@ int rtcmedia_connect_to_signaling_server(void) {
     saddr.sin_addr.s_addr = inet_addr(SIGNAL_SERVER_IP);
 
     if (connect(fd, (struct sockaddr *)&saddr, sizeof(saddr)) <  0) {
+        perror("connect ");
         fprintf(stderr, "Error: Connecting to signaling server failed\n");
         return 0;
     }
@@ -811,7 +850,8 @@ int rtcmedia_connect_to_signaling_server(void) {
 mb_status_t rtcmedia_process_media_description(char *buf, int len) {
 
     sdp_parser_t *parser = NULL;
-    su_home_t home[1] = { SU_HOME_INIT(home) };
+    //su_home_t home[1] = { SU_HOME_INIT(home) };
+    su_home_t *home = su_home_new(sizeof(*home));
     pc_media_desc_t peer_desc;
     sdp_session_t *sdp;
     int m_count, comp_count, fd;
@@ -830,21 +870,21 @@ mb_status_t rtcmedia_process_media_description(char *buf, int len) {
         return MB_INVALID_PARAMS;
     }
 
-    sdp = sdp_session(parser);
+    b_sdp = sdp_session(parser);
     if (sdp == NULL) {
         printf("SDP parsing error\n");
         return MB_INVALID_PARAMS;
     }
 
     /* extract peerconn media parameters from peer sdp */
-    status = mb_extract_pc_params_from_sdp(sdp, &peer_desc, &ice_found);
+    status = mb_extract_pc_params_from_sdp(b_sdp, &peer_desc, &ice_found);
     if (status != MB_OK) {
         printf("Error while extrcting peer conn params from peer sdp\n");
         return status;
     }
 
     /* determine how many rtp/ice sessions peer is proposing */
-    status = mb_determine_rtp_session_count_from_sdp(sdp, &m_count);
+    status = mb_determine_rtp_session_count_from_sdp(b_sdp, &m_count);
     if (status != MB_OK) {
         printf("Error while extrcting peer conn params from peer sdp\n");
         return status;
@@ -900,13 +940,55 @@ mb_status_t rtcmedia_process_media_description(char *buf, int len) {
 
     /* sometimes trickled ice candidates get appended to the sdp */
     if (ice_found == true) {
-        status = mb_extract_appended_ice_candidates_from_sdp(sdp);
+        status = mb_extract_appended_ice_candidates_from_sdp(b_sdp);
     }
 
-    sdp_parser_free(parser);
+    //sdp_parser_free(parser);
 
     return MB_OK;
 }
+
+
+
+static void rtcmedia_get_event_from_json(json_t *json) {
+
+    char *value;
+    json_t *event;
+
+    event = json_object_get(json, "eventName");
+    if (!json_is_string(event)) {
+
+        fprintf(stderr, "error: eventName is not a string\n");
+        return;
+    }
+
+    value = json_string_value(event);
+
+    printf("Received Event: %s\n", value);
+
+#if 0
+    if (strncasecmp(value, "get_peers", 9) == 0) {
+        e = RTC_EVENT_PEERS_LIST;
+    } else if (strncasecmp(value, "receive_ice_candidate", 21) == 0) {
+        e = RTC_EVENT_PEER_ICE_CAND;
+    } else if (strncasecmp(value, "receive_offer", 13) == 0) {
+        e = RTC_EVENT_PEER_MEDIA;
+    } else if (strncasecmp(value, "receive_answer", 14) == 0) {
+        e = RTC_EVENT_PEER_MEDIA;
+    } else if (strncasecmp(value, "new_peer_connected", 18) == 0) {
+        e = RTC_EVENT_NEW_PEER;
+    } else if (strncasecmp(value, "remove_peer_connected", 21) == 0) {
+        e = RTC_EVENT_DEL_PEER;
+    } else {
+        e = RTC_EVENT_MAX;
+    }
+
+    return e;
+#endif
+
+    return;
+}
+
 
 
 
@@ -923,7 +1005,7 @@ void rtcmedia_process_signaling_msg(int fd) {
         return;
     }
 
-    fprintf(stderr, "%s\n", buf);
+    //fprintf(stderr, "%s\n", buf);
 
     if (strstr(buf, "v=0"))  {
         rtcmedia_process_media_description(buf, count);
@@ -965,7 +1047,7 @@ void rtcmedia_process_timer_expiry(int fd) {
 
 
 
-void rtcmedia_process_media_msg(rtc_participant *p) {
+void rtcmedia_process_media_msg(rtc_participant_t *p) {
 
     uint8_t net_buf[1500];
     struct sockaddr_in recvaddr;

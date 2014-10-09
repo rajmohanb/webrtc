@@ -22,19 +22,23 @@ extern "C" {
 
 /******************************************************************************/
 
+#define MB_LIVECAST_MAX_RECEIVERS   10
 
 typedef struct {
 
     handle pc;
     int fd;
     void *session;
-} rtc_participant;
+    char *id;
+} rtc_participant_t;
 
 typedef struct {
 
-    rtc_participant tx;
+    rtc_participant_t tx;
 
-    rtc_participant rx;
+    int cur_rx_count;
+    rtc_participant_t rx;
+    //rtc_participant rx[MB_LIVECAST_MAX_RECEIVERS];
 
 } rtc_bcast_session_t;
 
