@@ -26,9 +26,12 @@ extern "C" {
 #define PC_DTLS_CERT_FILE  "mycert.pem"
 #define PC_DTLS_KEY_FILE   "mycert.key"
 
+
 /* TODO; need to revisit */    
 #define PC_DTLS_CIPHERS     "ALL:NULL:eNULL:aNULL"
 
+
+#define DTLS_RETX_TIMER_VAL 100 /* milliseconds */
 
 
 typedef enum {
@@ -55,6 +58,8 @@ typedef struct {
 #endif
 
     dtls_srtp_data_send_cb cb;
+    dtls_srtp_start_timer_cb timer_start_cb;
+    dtls_srtp_stop_timer_cb timer_stop_cb;
 
 } dtls_srtp_instance_t;
 
@@ -85,6 +90,18 @@ typedef struct {
     /* peer certificate fingerprint */
     unsigned char peer_fp[EVP_MAX_MD_SIZE];
     uint32_t peer_fp_len;
+
+    /* retransmission for handshake */
+    char *sent_msg;
+    uint32_t sent_msg_len;
+    handle timer_id;
+
+    /* 
+     * Note; This is a minimal re-transmission implementation for now. To be
+     * safe, we need to have retransmission implementation for multiple 
+     * buffers, but as of now we have only one buffer. RFC 4347 talks of 
+     * multiple flights during a handshake. To be taken care of in future.
+     */
 
 } dtls_srtp_session_t;
 

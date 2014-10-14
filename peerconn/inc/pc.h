@@ -165,13 +165,15 @@ typedef struct
 } pc_ice_cand_t;
 
 
-typedef void (*pc_ice_candidates_cb) (handle pc, ice_cand_params_t *c);
-typedef void (*pc_ic_media_data_cb) (handle pc, uint8_t *buf, uint32_t len);
+typedef void (*pc_ice_candidates_cb) (
+                handle pc, handle app_handle, ice_cand_params_t *c);
+typedef void (*pc_ic_media_data_cb) (
+                handle pc, handle app_handle, uint8_t *buf, uint32_t len);
 
 
 mb_status_t pc_init(pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb);
 
-mb_status_t pc_create_session(handle *peerconn);
+mb_status_t pc_create_session(handle app_handle, handle *peerconn);
 
 mb_status_t pc_destroy_session(handle peerconn);
 

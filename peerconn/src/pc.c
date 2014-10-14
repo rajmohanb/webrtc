@@ -156,7 +156,8 @@ static void pc_rx_data(handle h_inst, handle h_session,
 static void pc_media_ice_candidate_handler(handle h_inst, handle h_session, 
                     handle h_media, handle app_handle, ice_cand_params_t *cand)
 {
-    pc_ice_cb(app_handle, cand);
+    pc_ctxt_t *ctxt = (pc_ctxt_t *)app_handle;
+    pc_ice_cb(app_handle, ctxt->app_blob, cand);
 
     return;
 }
@@ -304,7 +305,8 @@ mb_status_t pc_init(pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb
 
 
     /* initialize the dtls_srtp library */
-    status = dtls_srtp_init(pc_send_dtls_srtp_data);
+    status = dtls_srtp_init(
+            pc_send_dtls_srtp_data, pc_start_timer, pc_stop_timer);
     if (status != MB_OK) {
         fprintf(stderr, "DTLS_SRTP module initialization failed\n");
         return status;
@@ -339,7 +341,7 @@ mb_status_t pc_deinit(void) {
 }
 
 
-mb_status_t pc_create_session(handle *peerconn) {
+mb_status_t pc_create_session(handle app_handle, handle *peerconn) {
 
     mb_status_t status;
     int32_t ice_status;
@@ -393,6 +395,8 @@ mb_status_t pc_create_session(handle *peerconn) {
         status = MB_INT_ERROR;
         goto MB_ERROR_2;
     }
+
+    ctxt->app_blob = app_handle;
 
     *peerconn = ctxt;
     return MB_OK;
@@ -484,6 +488,19 @@ mb_status_t pc_inject_timer_event(pc_timer_event_t *event) {
                         event->timer_id, event->arg, &ice_session);
     if (status != STUN_OK) {
         fprintf(stderr, "ICE stack timer event, returned %d\n", status);
+    }
+
+    /*
+     * TODO: Really crude way of timer management. Currently we don't 
+     * differentiate between ice timers and dtls timers. So as of now handling
+     * in this way. If ICE reports that it is an invalid timer, then we pass it
+     * on to dtls!!!
+     */
+    if (status != STUN_OK) {
+        status = dtls_srtp_inject_timer_event(event->timer_id, event->arg);
+        if (status != MB_OK) {
+            fprintf(stderr, "Error! DTLS timer event, returned %d\n", status);
+        }
     }
 
     return MB_OK;

@@ -292,7 +292,7 @@ mb_status_t pc_utils_process_srtp_packet(
     //fprintf(stderr, "After Unprotect: buf %p and len %d\n", buf, rtp_len);
 
     /* hand over the clear rtp packets to application */
-    pc_media_cb(ctxt, buf, (uint32_t)rtp_len);
+    pc_media_cb(ctxt, ctxt->app_blob, buf, (uint32_t)rtp_len);
 
     return MB_OK;
 }

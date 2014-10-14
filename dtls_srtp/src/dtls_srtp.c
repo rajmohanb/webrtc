@@ -66,15 +66,34 @@ void dtls_srtp_send_any_pending_data(dtls_srtp_session_t *s) {
     printf("SSL SINK BIO PENDING BYTES: %d\n", pending);
 
     if (pending) {
-        char buf[pending];
-        buf_len = BIO_read(s->sink_bio, buf, sizeof(buf));
+        //char buf[pending];
+        if (s->sent_msg) {
+            free(s->sent_msg);
+        }
 
-        sent = g_dtls_srtp.cb(s, buf, buf_len, s->app_handle);
+        s->sent_msg = calloc(1, pending);
+        s->sent_msg_len = pending;
+        buf_len = BIO_read(s->sink_bio, s->sent_msg, pending);
+
+        sent = g_dtls_srtp.cb(s, s->sent_msg, buf_len, s->app_handle);
 
         if (sent < buf_len) {
             fprintf(stderr, "Error sending DTLS data. Sent "\
                     "only %d bytes against given %d bytes\n", sent, buf_len);
             /* TODO; what do we do now? error? */
+        }
+
+        /* 
+         * minimal retransmission support for dtls handshake 
+         * messages as per RFC 4347.
+         */
+        s->timer_id = g_dtls_srtp.timer_start_cb(DTLS_RETX_TIMER_VAL, s);
+        if (s->timer_id) {
+            fprintf(stderr, "Started DTLS retransmission "\
+                    "timer for %d duration\n", DTLS_RETX_TIMER_VAL);
+        } else {
+            fprintf(stderr, "Starting DTLS retransmission "\
+                    "timer for %d duration FAILED\n", DTLS_RETX_TIMER_VAL);
         }
     }
 
@@ -82,7 +101,9 @@ void dtls_srtp_send_any_pending_data(dtls_srtp_session_t *s) {
 }
 
 
-mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb) {
+mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb, 
+        dtls_srtp_start_timer_cb start_timer_cb, 
+        dtls_srtp_stop_timer_cb stop_timer_cb) {
 
     const EVP_MD *digest;
     unsigned int n, pos;
@@ -173,6 +194,8 @@ mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb) {
     }
 
     g_dtls_srtp.cb = cb;
+    g_dtls_srtp.timer_start_cb = start_timer_cb;
+    g_dtls_srtp.timer_stop_cb = stop_timer_cb;
 
     return MB_OK;
 PC_ERROR_EXIT2:
@@ -442,6 +465,49 @@ mb_status_t dtls_srtp_session_get_keying_material(
         fprintf(stderr, "Error while "\
                 "extracting the keying material from DTLS association\n");
         return MB_VALIDATON_FAIL;
+    }
+
+    return MB_OK;
+}
+
+
+
+mb_status_t dtls_srtp_inject_timer_event(handle timer_id, handle arg) {
+
+    int sent;
+    dtls_srtp_session_t *s = (dtls_srtp_session_t *)arg;
+
+    if (s->timer_id != timer_id) {
+        fprintf(stderr, "[DTLS} Stuck with Paranoid check!. Expired "\
+                "timer id %p and dtls session timer id %p\n", 
+                timer_id, s->timer_id);
+        return MB_INVALID_PARAMS;
+    }
+
+    /* in case the session is in ready state, then sit pretty */
+    if (s->state == DTLS_SRTP_READY) {
+        fprintf(stderr, "The DTLS session has moved to READY state, hence "\
+                "ignoring any further retransmission. And ignoring current "\
+                "timer expiry event with handle %p\n", timer_id);
+        return MB_OK;
+    }
+
+    /* resend the last sent message and restart timer */
+    sent = g_dtls_srtp.cb(s, s->sent_msg, s->sent_msg_len, s->app_handle);
+
+    if (sent < s->sent_msg_len) {
+        fprintf(stderr, "Error Re-transmitting DTLS data. Sent only "\
+                "%d bytes against given %d bytes\n", sent, s->sent_msg_len);
+        /* TODO; what do we do now? error? */
+    }
+
+    s->timer_id = g_dtls_srtp.timer_start_cb(DTLS_RETX_TIMER_VAL, s);
+    if (s->timer_id) {
+        fprintf(stderr, "Started DTLS retransmission "\
+                "timer for %d duration\n", DTLS_RETX_TIMER_VAL);
+    } else {
+        fprintf(stderr, "Starting DTLS retransmission "\
+                    "timer for %d duration FAILED\n", DTLS_RETX_TIMER_VAL);
     }
 
     return MB_OK;

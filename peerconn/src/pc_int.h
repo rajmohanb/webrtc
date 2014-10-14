@@ -53,6 +53,9 @@ typedef struct {
 
     pc_state_t state;
 
+    /* application blob */
+    handle app_blob;
+
     /* ice session params */
     handle ice_session;
     handle media;

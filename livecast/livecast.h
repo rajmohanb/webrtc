@@ -13,8 +13,8 @@
 *                                                                              *
 *******************************************************************************/
 
-#ifndef DTLS_SRTP__H
-#define DTLS_SRTP__H
+#ifndef RTC_MEDIA__H
+#define RTC_MEDIA__H
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,61 +23,47 @@ extern "C" {
 /******************************************************************************/
 
 
-typedef enum {
-    DTLS_MD5,
-    DTLS_SHA1,
-    DTLS_SHA256,
-} dtls_key_type_t;
-
+#define MB_LIVECAST_MAX_RECEIVERS   10
 
 typedef enum {
 
-    DTLS_ROLE_MIN,
-    DTLS_ACTIVE,
-    DTLS_PASSIVE,
-    DTLS_ACTPASS,
-    DTLS_HOLDCONN,
-    DTLS_ROLE_MAX,
-} dtls_setup_role_type_t;
+    LIVECAST_INIT,
+    LIVECAST_BC_OFFER_SENT,
+    LIVECAST_BC_LIVE,
+
+} livecast_state_t;
 
 
-typedef int (*dtls_srtp_data_send_cb) (
-        handle dtls, char *buf, int len, handle app_handle);
-typedef handle (*dtls_srtp_start_timer_cb) (uint32_t duration, handle arg);
-typedef int32_t (*dtls_srtp_stop_timer_cb) (handle timer_id);
+typedef struct {
+
+    handle pc;
+    int fd;
+    char *id;
+    bool is_broadcaster;
+
+    pc_local_media_desc_t local_desc;
+
+    void *session;
+} rtc_participant_t;
 
 
-mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb, 
-        dtls_srtp_start_timer_cb start_timer_cb, 
-        dtls_srtp_stop_timer_cb stop_timer_cb);
+typedef struct {
 
+    livecast_state_t state;
 
-mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role, 
-            dtls_key_type_t type, int sock, handle app_handle, handle *h_dtls);
+    rtc_participant_t tx;
+    sdp_session_t *tx_sdp;
 
+    uint32_t tx_vid_ssrc1;
+    uint32_t tx_vid_ssrc2;
+    uint32_t tx_aud_ssrc;
+    uint32_t tx_app_ssrc;
 
-mb_status_t dtls_srtp_session_do_handshake(handle h_dtls);
+    int cur_rx_count;
+    rtc_participant_t rx;
+    //rtc_participant_t rx[MB_LIVECAST_MAX_RECEIVERS];
 
-
-mb_status_t dtls_srtp_session_inject_data(handle h_dtls, 
-                uint8_t *data, int len, int *is_handshake_done);
-
-
-mb_status_t dtls_srtp_session_get_peer_fingerprint(
-                    handle h_dtls, unsigned char *fp, uint32_t *fp_len);
-
-
-mb_status_t dtls_srtp_session_get_keying_material(
-                        handle h_dtls, unsigned char *keying_material);
-
-
-mb_status_t dtls_srtp_inject_timer_event(handle timer_id, handle arg);
-
-
-mb_status_t dtls_srtp_destroy_session(handle h_dtls);
-
-
-mb_status_t dtls_srtp_deinit(void);
+} rtc_bcast_session_t;
 
 
 
