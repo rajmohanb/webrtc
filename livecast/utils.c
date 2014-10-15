@@ -112,20 +112,15 @@ rtc_participant_t* livecast_utils_search_participant(
     int i;
     rtc_participant_t *p;
 
-    if (strncmp(s->tx.id, id, strlen(id)) == 0)
+    if ((s->tx.id) && (strncmp(s->tx.id, id, strlen(id)) == 0))
         return &(s->tx);
 
-#if 1
-    if ((s->rx.id) && (strncmp(s->rx.id, id, strlen(id)) == 0))
-        return &(s->rx);
-#else
     for (i = 0; i < MB_LIVECAST_MAX_RECEIVERS; i++) { 
 
         p = &s->rx[i];
-        if (strncmp(p->id, id, strlen(id)) == 0)
+        if ((p->id) && (strncmp(p->id, id, strlen(id)) == 0))
             return p;
     }
-#endif
 
     return NULL;
 }
@@ -240,12 +235,23 @@ mb_status_t livecast_utils_extract_pc_params_from_sdp(rtc_participant_t *p,
 
 rtc_participant_t* livecast_utils_get_new_receiver(rtc_bcast_session_t *s) {
 
+    int32_t i;
     rtc_participant_t *p;
 
-    /* TODO; for now */
-    p = &(s->rx);
+    if (s->cur_rx_count >= MB_LIVECAST_MAX_RECEIVERS) {
+        fprintf(stderr, "Have already reached max number of receivers\n");
+        return NULL;
+    }
 
-    if (p->id) return NULL;
+    for (i = 0; i < MB_LIVECAST_MAX_RECEIVERS; i++) {
+        p = &s->rx[i];
+
+        if(!p->id) break;
+    }
+
+    if (i == MB_LIVECAST_MAX_RECEIVERS) return NULL;
+
+    s->cur_rx_count += 1;
 
     return p;
 }

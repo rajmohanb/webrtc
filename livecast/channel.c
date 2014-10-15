@@ -75,7 +75,7 @@ mb_status_t rtcmedia_process_new_channel_req(json_t *msg) {
     /* create peerconn session */
     status = pc_create_session(&pc_handle);
     if (status != MB_OK) {
-        printf("Unable to initialize peerconn library: %d\n", status);
+        printf("Unable to create peerconn session: %d\n", status);
         return status;
     }
 
@@ -188,7 +188,7 @@ mb_status_t rtcmedia_process_offer(json_t *msg) {
     /* create peerconn session */
     status = pc_create_session((handle)p, &p->pc);
     if (status != MB_OK) {
-        printf("Unable to initialize peerconn library: %d\n", status);
+        printf("Unable to create peerconn session: %d\n", status);
         return status;
     }
 
@@ -410,9 +410,59 @@ mb_status_t rtcmedia_add_new_participant(json_t *msg) {
     p->is_broadcaster = false;
     p->session = s;
 
-    s->cur_rx_count += 1;
+    fprintf(stderr, "New participant created with receiver id: %s\n", p->id);
 
-    fprintf(stderr, "New channel created with broadcaster id: %s\n", p->id);
+    return MB_OK;
+}
+
+
+
+mb_status_t rtcmedia_remove_participant(json_t *msg) {
+
+    char *id;
+    json_t *data, *r_id;
+    rtc_bcast_session_t *s = &g_session;
+    rtc_participant_t *p;
+    mb_status_t status;
+
+    data = json_object_get(msg, "data");
+    if (!json_is_object(data)) {
+
+        fprintf(stderr, "Error: extracting data from json object\n");
+        return MB_INVALID_PARAMS;
+    }
+
+    r_id = json_object_get(data, "socketId");
+    if (!json_is_string(r_id)) {
+
+        fprintf(stderr, "Error: extracting socket id from json string\n");
+        return MB_INVALID_PARAMS;
+    }
+
+    id = json_string_value(r_id);
+    if (!id) {
+
+        fprintf(stderr, "Error: Getting string parameter value\n");
+        return MB_INVALID_PARAMS;
+    }
+
+    p = livecast_utils_search_participant(s, id);
+    if (p == NULL) {
+        fprintf(stderr, "Unknown participant id %s. Ignoring \n", id);
+        return MB_INVALID_PARAMS;
+    }
+
+    if (p->pc) {
+        status = pc_destroy_session(p->pc);
+        if (status != MB_OK) {
+            fprintf(stderr, "Destroying of peerconn failed\n");
+        }
+    }
+
+    free(p->id);
+    memset(p, 0, sizeof(rtc_participant_t));
+
+    s->cur_rx_count -= 1;
 
     return MB_OK;
 }

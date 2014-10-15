@@ -992,7 +992,7 @@ void rtcmedia_process_signaling_msg(int fd) {
         } else if (strncasecmp(value, "new_peer_connected", 18) == 0) {
             status = rtcmedia_add_new_participant(root);
         } else if (strncasecmp(value, "remove_peer_connected", 21) == 0) {
-            //status = rtcmedia_process_remove_participant();
+            status = rtcmedia_remove_participant(root);
         } else {
             fprintf(stderr, 
                     "Unknown event [%s] received from signaling server\n", value);
@@ -1165,7 +1165,9 @@ mb_status_t rtcmedia_setup_timer_socket(void) {
 void pc_incoming_media(handle pc, 
                 handle app_handle, uint8_t *buf, uint32_t len) {
 
+    int32_t i;
     mb_status_t status;
+    rtc_participant_t *r;
     rtc_participant_t *p = (rtc_participant_t *)app_handle;
     rtc_bcast_session_t *s = p->session;
 
@@ -1174,10 +1176,15 @@ void pc_incoming_media(handle pc,
             return;
 
     /* pipe it to the other peerconnection */
-    if (!s->rx.pc) return;
-    status = pc_send_media_data(s->rx.pc, buf, len);
-    if (status != MB_OK) {
-        fprintf(stderr, "Sending of broadcast media of len [%d] to receiver failed\n", len);
+    for (i = 0; i < MB_LIVECAST_MAX_RECEIVERS; i++) {
+
+        r = &(s->rx[i]);
+        if (!r->pc) continue;
+
+        status = pc_send_media_data(r->pc, buf, len);
+        if (status != MB_OK) {
+            fprintf(stderr, "Sending of broadcast media of len [%d] to receiver failed\n", len);
+        }
     }
 
     return;
@@ -1188,8 +1195,9 @@ void pc_incoming_media(handle pc,
 int main(int argc, char **argv) {
 
     mb_status_t status;
-    int ret, i, n;
+    int ret, i, j, n;
     struct epoll_event event, *events;
+    rtc_participant_t *p;
 
     status = rtc_media_get_local_ip(g_local_ip, 48);
     if (status != MB_OK) {
@@ -1255,9 +1263,11 @@ int main(int argc, char **argv) {
 
             if (g_sigfd == events[i].data.fd) {
                 rtcmedia_process_signaling_msg(g_sigfd);
+#if 0
             } else if (&g_session.rx == events[i].data.ptr) {
                 //printf("epoll notification RX: Data on data ptr %p\n", events[i].data.ptr);
                 rtcmedia_process_media_msg(&g_session.rx);
+#endif
             } else if (&g_session.tx == events[i].data.ptr) {
                 //printf("epoll notification TX: Data on data ptr %p\n", events[i].data.ptr);
                 rtcmedia_process_media_msg(&g_session.tx);
@@ -1265,7 +1275,16 @@ int main(int argc, char **argv) {
                 rtcmedia_process_timer_expiry(g_timerfd);
             } else {
 
-                fprintf(stderr, "Error: Unknown message received on epoll\n");
+                for (j = 0; j < MB_LIVECAST_MAX_RECEIVERS; j++) {
+                    p = &g_session.rx[j];
+                    if (p == events[i].data.ptr) {
+                        rtcmedia_process_media_msg(p);
+                        break;
+                    }
+                }
+
+                if (i == MB_LIVECAST_MAX_RECEIVERS)
+                    fprintf(stderr, "Error: Unknown message received on epoll\n");
             }
         }
     }

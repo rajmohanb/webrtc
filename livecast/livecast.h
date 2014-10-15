@@ -60,8 +60,7 @@ typedef struct {
     uint32_t tx_app_ssrc;
 
     int cur_rx_count;
-    rtc_participant_t rx;
-    //rtc_participant_t rx[MB_LIVECAST_MAX_RECEIVERS];
+    rtc_participant_t rx[MB_LIVECAST_MAX_RECEIVERS];
 
 } rtc_bcast_session_t;
 
