@@ -64,34 +64,9 @@ mb_status_t rtcmedia_process_new_channel_req(json_t *msg) {
 
     fprintf(stderr, "New channel created with broadcaster id: %s\n", p->id);
 
-#if 0
-    /* send offer */
-    status = livecast_utils_create_local_pc_description(&local_desc, &fd);
-    if (status != MB_OK) {
-        printf("Error while creating local media params\n");
-        return status;
-    }
-
-    /* create peerconn session */
-    status = pc_create_session(&pc_handle);
-    if (status != MB_OK) {
-        printf("Unable to create peerconn session: %d\n", status);
-        return status;
-    }
-
-    g_session.rx.pc = pc_handle;
-    g_session.rx.session = &g_session;
-
-    /* set local media description */
-    status = pc_set_local_media_description(pc_handle, &local_desc);
-    if (status != MB_OK) {
-        printf("Settng of remote sdp failed\n");
-        return status;
-    }
-#endif
-
     return status;
 }
+
 
 
 mb_status_t rtcmedia_process_offer(json_t *msg) {

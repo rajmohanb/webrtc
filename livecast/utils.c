@@ -23,7 +23,6 @@ extern int g_epfd;
 extern char cert_fp[];
 
 mb_status_t livecast_utils_create_local_pc_description(rtc_participant_t *p) {
-    // pc_local_media_desc_t *desc, int *fd) {
 
     uint32_t i = 0;
     int ret, new_fd, port;

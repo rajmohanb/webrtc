@@ -184,235 +184,6 @@ mb_status_t mb_determine_rtp_session_count_from_sdp(
 }
 
 
-#if 0
-mb_status_t rtcmedia_process_ice_description(char *buf, int len) {
-
-    int cnt;
-    pc_ice_cand_t c;
-    char transport[12], type[32], *ice = buf;
-    mb_status_t status;
-    handle pc_handle;
-
-    fprintf(stderr, "ICE message of len [%d]=> %s\n", len, buf);
-
-    while((ice = strstr(ice, "a=candidate:")) != NULL) {
-    
-        memset(&c, 0, sizeof(c));
-
-        ice += 12;
-
-        cnt = sscanf(ice, "%s %d %s %lld %s %d typ %s", 
-                c.cand.foundation, &c.cand.component_id, transport, 
-                &c.cand.priority, c.cand.ip_addr, &c.cand.port, type);
-        if (cnt != 7) {
-
-            fprintf(stderr, "Invalid ICE candidate line. Wrong no of params?\n");
-            return MB_INVALID_PARAMS;
-        }
-
-        if (strncmp(type, "host", 4) == 0)
-            c.cand.cand_type = ICE_CAND_TYPE_HOST;
-        else if (strncmp(type, "srflx", 5) == 0)
-            c.cand.cand_type = ICE_CAND_TYPE_SRFLX;
-        else if (strncmp(type, "relay", 5) == 0)
-            c.cand.cand_type = ICE_CAND_TYPE_RELAYED;
-        else {
-            fprintf(stderr, "Error: invalid candidate type '%s'", type);
-            return MB_INVALID_PARAMS;
-        }
-
-        if (strncmp(transport, "udp", 3) == 0)
-            c.cand.protocol = ICE_TRANSPORT_UDP;
-        else if (strncmp(transport, "tcp", 3) == 0)
-            c.cand.protocol = ICE_TRANSPORT_TCP;
-        else {
-            fprintf(stderr, "Invalid Unknown transport %s\n", transport);
-            return MB_INVALID_PARAMS;
-        }
-
-        c.cand.ip_addr_type = STUN_INET_ADDR_IPV4; /* TODO; hard code */
-
-        c.eoc = false; /* TODO; hardcode */
-
-
-        /*
-         * Hack!
-         * This will only work with Chrome (and Opera) probably for now.
-         * Chrome makes use of rtcp-mux to send both rtp and rtcp multiplexed 
-         * into the same transport port. So effectively there is only one ICE 
-         * media stream with only one component. So we will have to pick out 
-         * any ice candidates with component value of other than 1
-         */
-        if (c.cand.component_id != 1) {
-
-            fprintf(stderr, "Discarding ICE candidate "\
-                    "with component value of %d\n", c.cand.component_id);
-            continue;
-        }
-
-        /*
-         * Hack!
-         * Chrome and probably other implementations send TCP ICE candidates.
-         * We do not support ICE-TCP, so discard any candidate information
-         * that is not of type UDP.
-         */
-        if (c.cand.protocol != ICE_TRANSPORT_UDP) {
-
-            fprintf(stderr, "Discarding ICE candidate "\
-                    "with non-UDP transport protocol: %d\n", c.cand.protocol);
-            continue;
-        }
-
-        if (g_ready == 0) {
-            pc_handle = g_session.rx.pc;
-        } else {
-            pc_handle = g_session.tx.pc;
-        }
-
-        /* TODO; Hack!!!! */
-        if (pc_handle == 0) pc_handle = g_session.rx.pc;
-
-        status = pc_set_remote_ice_candidate(pc_handle, &c);
-        if (status != MB_OK) {
-            printf("Settng of remote ice candidate failed\n");
-            return status;
-        }
-    }
-
-    return MB_OK;
-}
-#endif
-
-
-#if 0
-mb_status_t mb_extract_appended_ice_candidates_from_sdp(sdp_session_t *sdp) {
-
-    sdp_media_t *media;
-    sdp_attribute_t *attr;
-
-    for(media = sdp->sdp_media; media; media = media->m_next) {
-        for(attr = media->m_attributes; attr; attr = attr->a_next) {
-            
-            //printf("%s: [%s]\n", attr->a_name, attr->a_value);
-
-            if (strncasecmp(attr->a_name, "candidate", 9) == 0) {
-                char icedesc[128] = {0};
-                printf("Candidate attribute received: Len %d : %s\n", 
-                                    strlen(attr->a_value), attr->a_value);
-                snprintf(icedesc, 128, "a=candidate:%s", attr->a_value);
-                rtcmedia_process_ice_description(icedesc, strlen(icedesc));
-            }
-        }
-    }
-
-    return MB_OK;
-}
- 
-
-mb_status_t mb_extract_pc_params_from_sdp(
-        sdp_session_t *sdp, pc_media_desc_t *pc_media, bool *ice_found) {
-
-    sdp_media_t *media;
-    sdp_attribute_t *attr;
-
-    memset(pc_media, 0, sizeof(pc_media_desc_t));
-
-    *ice_found = false;
-
-    for(media = sdp->sdp_media; media; media = media->m_next) {
-        for(attr = media->m_attributes; attr; attr = attr->a_next) {
-            
-            //printf("%s: [%s]\n", attr->a_name, attr->a_value);
-
-            if (strncasecmp(attr->a_name, "candidate", 9) == 0) {
-
-                printf("Candidate attribute received: Len %d TODO %s\n", 
-                                    strlen(attr->a_value), attr->a_value);
-                *ice_found = true;
-            }
-            else if (strncasecmp(attr->a_name, "ice-ufrag", 9) == 0) {
-                strncpy(pc_media->ice_ufrag, attr->a_value, PC_ICE_MAX_UFRAG_LEN);
-            }
-            else if (strncasecmp(attr->a_name, "ice-pwd", 7) == 0) {
-                strncpy(pc_media->ice_pwd, attr->a_value, PC_ICE_MAX_PWD_LEN);
-            }
-            else if (strncasecmp(attr->a_name, "ice-options", 11) == 0) {
-                strncpy(pc_media->ice_options, attr->a_value, PC_ICE_OPTIONS_LEN);
-            }
-            else if (strncasecmp(attr->a_name, "ssrc-group", 10) == 0) {
-
-                /* Hack! extract only for the broadcaster */
-                if (g_ready == 0) {
-
-                    if (media->m_type == sdp_media_video) {
-                        char *token = strtok((char *)attr->a_value, " ");
-
-                        token = strtok(NULL, " ");
-                        g_video_ssrc1 = (uint32_t) strtoul(token, NULL, 10);
-
-                        token = strtok(NULL, "\r\n");
-                        g_video_ssrc2 = (uint32_t) strtoul(token, NULL, 10);
-                    }
-                }
-            }
-            else if (strncasecmp(attr->a_name, "ssrc", 4) == 0) {
-                /* Hack!! */
-                if (g_ready == 0) {
-                    /* extract the ssrc parameters from broadcaster offer */
-                    if (media->m_type == sdp_media_audio)
-                        g_audio_ssrc = (uint32_t) strtoul(attr->a_value, NULL, 10);
-                    else if (media->m_type == sdp_media_video)
-                        //g_video_ssrc1 = (uint32_t) strtoul(attr->a_value, NULL, 10);
-                        ;
-                    else
-                        g_app_ssrc = (uint32_t) strtoul(attr->a_value, NULL, 10);
-                }
-            }
-            else if (strncasecmp(attr->a_name, "fingerprint", 11) == 0) {
-
-                /* TODO: should use strtok_r */
-                char *token = strtok((char *)attr->a_value, " ");
-                if (strncasecmp(token, "sha-256", 7) == 0) {
-                    pc_media->dtls_key_type = PC_SHA256;
-                }
-                else if (strncasecmp(token, "sha-1", 5) == 0) {
-                    pc_media->dtls_key_type = PC_SHA1;
-                }
-                else {
-                    printf("Unknown fingerprint key type: %s\n", token);
-                }
-
-                while((token = strtok(NULL, " "))) {
-                
-                    strncpy(pc_media->fp_key, token, MAX_DTLS_FINGERPRINT_KEY_LEN);
-                }
-
-            }
-            else if (strncasecmp(attr->a_name, "setup", 5) == 0) {
-                if (strncasecmp(attr->a_value, "active", 6) == 0) {
-                    pc_media->role = PC_DTLS_ACTIVE;
-                }
-                else if (strncasecmp(attr->a_value, "passive", 7) == 0) {
-                    pc_media->role = PC_DTLS_PASSIVE;
-                }
-                else if (strncasecmp(attr->a_value, "actpass", 7) == 0) {
-                    pc_media->role = PC_DTLS_ACTPASS;
-                }
-                else if (strncasecmp(attr->a_value, "holdconn", 8) == 0) {
-                    pc_media->role = PC_DTLS_HOLDCONN;
-                }
-                else {
-                    printf("Unknown setup attribute: %s\n", attr->a_value);
-                }
-            }
-        }
-    }
-
-    return MB_OK;
-}
-#endif
-
-
 
 int32_t rtcmedia_make_socket_non_blocking(int sock_fd)
 {
@@ -488,7 +259,7 @@ mb_status_t mb_create_send_trickle_ice_candidate(
     int n, len, len1;
     char iceattr[128] = {0};
     char iceattr1[128] = {0};
-    json_t *tkl_ice, *cand, *data, *root;
+    json_t *cand, *data, *root;
     char *cmd;
 
     printf("**************** >>>>>>>>>>>>>>  GOT TRICKLE CANDIDATE %d\n", c->cand_type);
@@ -515,18 +286,6 @@ mb_status_t mb_create_send_trickle_ice_candidate(
                 "relay raddr %s rport %d", c->foundation, (c->component_id+1), 
                 c->priority, c->ip_addr, c->port, c->rel_addr, c->rel_port);
     }
-
-#if 0
-    tkl_ice = json_object();
-    desc = json_string(msg);
-    if (desc == NULL) { printf("FAILURE 0\n"); }
-
-    n = json_object_set_new(answer, "sdp", desc);
-    if (n == -1) { printf("FAILURE 1\n"); }
-
-    n = json_object_set_new(answer, "type", json_string("answer"));
-    if (n == -1) { printf("FAILURE 2\n"); }
-#endif
 
     data = json_object();
     n = json_object_set_new(data, "socketId", json_string(p->id));
@@ -624,20 +383,6 @@ mb_status_t mb_create_send_answer(
         /* append ice host candidate */
         sdp_attribute_append(&media->m_attributes, &a0);
 
-#if 0
-        /* Hack! for chrome draft-ietf-rtcweb-jsep-07 sec 5.2.2 */
-        if (g_ready == 0) {
-            sdp_attribute_t *attr;
-
-            attr = sdp_attribute_remove(&media->m_attributes, "msid");
-            attr = sdp_attribute_remove(&media->m_attributes, "ssrc-group");
-
-            do {
-                attr = sdp_attribute_remove(&media->m_attributes, "ssrc");
-            } while(attr);
-        }
-#endif
-        
         if (p->is_broadcaster == true) {
             media->m_mode = sdp_recvonly;
         } else {
@@ -819,110 +564,6 @@ int rtcmedia_connect_to_signaling_server(void) {
 }
 
 
-#if 0
-mb_status_t rtcmedia_process_media_description(char *buf, int len) {
-
-    sdp_parser_t *parser = NULL;
-    //su_home_t home[1] = { SU_HOME_INIT(home) };
-    su_home_t *home = su_home_new(sizeof(*home));
-    pc_media_desc_t peer_desc;
-    sdp_session_t *sdp;
-    int m_count, comp_count, fd;
-    mb_status_t status;
-    bool ice_found;
-    handle pc_handle;
-
-    memset(&local_desc, 0, sizeof(local_desc));
-
-    fprintf(stderr, "Received SDP of len [%d]: %s\n", len, buf);
-
-    /* parse the sdp */
-    parser = sdp_parse(home, buf, len, 0);
-    if (!sdp_session(parser)) {
-        printf("SDP parsing error: %s\n", sdp_parsing_error(parser));
-        return MB_INVALID_PARAMS;
-    }
-
-    b_sdp = sdp_session(parser);
-    if (sdp == NULL) {
-        printf("SDP parsing error\n");
-        return MB_INVALID_PARAMS;
-    }
-
-    /* extract peerconn media parameters from peer sdp */
-    status = mb_extract_pc_params_from_sdp(b_sdp, &peer_desc, &ice_found);
-    if (status != MB_OK) {
-        printf("Error while extrcting peer conn params from peer sdp\n");
-        return status;
-    }
-
-    /* determine how many rtp/ice sessions peer is proposing */
-    status = mb_determine_rtp_session_count_from_sdp(b_sdp, &m_count);
-    if (status != MB_OK) {
-        printf("Error while extrcting peer conn params from peer sdp\n");
-        return status;
-    }
-
-    /* TODO; hardcoded */
-    m_count = 1;
-    comp_count = 1;
-
-    /* Hack! */
-    status = livecast_utils_create_local_pc_description(&local_desc, &fd);
-    if (status != MB_OK) {
-        printf("Error while creating local media params\n");
-        return status;
-    }
-
-    if (g_ready == 0)
-        g_session.rx.fd = fd;
-    else
-        g_session.tx.fd = fd;
-
-    printf("FD for RX: %d\n", g_session.rx.fd);
-    printf("FD for TX: %d\n", g_session.tx.fd);
-
-    /* create peerconn session */
-    status = pc_create_session(&pc_handle);
-    if (status != MB_OK) {
-        printf("Unable to initialize peerconn library: %d\n", status);
-        return status;
-    }
-
-    if(g_ready == 0) {
-        g_session.rx.pc = pc_handle;
-        g_session.rx.session = &g_session;
-    } else {
-        g_session.tx.pc = pc_handle;
-        g_session.tx.session = &g_session;
-    }
-
-    /* set local media description */
-    status = pc_set_local_media_description(pc_handle, &local_desc);
-    if (status != MB_OK) {
-        printf("Settng of remote sdp failed\n");
-        return status;
-    }
-
-    /* set the peer media description */
-    status = pc_set_remote_media_description(pc_handle, &peer_desc);
-    if (status != MB_OK) {
-        printf("Settng of remote sdp failed\n");
-        return status;
-    }
-
-    /* sometimes trickled ice candidates get appended to the sdp */
-    if (ice_found == true) {
-        status = mb_extract_appended_ice_candidates_from_sdp(b_sdp);
-    }
-
-    //sdp_parser_free(parser);
-
-    return MB_OK;
-}
-#endif
-
-
 
 void rtcmedia_process_signaling_msg(int fd) {
 
@@ -998,13 +639,6 @@ void rtcmedia_process_signaling_msg(int fd) {
                     "Unknown event [%s] received from signaling server\n", value);
         }
 
-#if 0
-        if (strstr(buf, "v=0"))  {
-            rtcmedia_process_media_description(buf, count);
-        } else {
-            rtcmedia_process_ice_description(buf, count);
-        }
-#endif
     } while(count > (ptr-buf));
 
     return;
@@ -1263,11 +897,6 @@ int main(int argc, char **argv) {
 
             if (g_sigfd == events[i].data.fd) {
                 rtcmedia_process_signaling_msg(g_sigfd);
-#if 0
-            } else if (&g_session.rx == events[i].data.ptr) {
-                //printf("epoll notification RX: Data on data ptr %p\n", events[i].data.ptr);
-                rtcmedia_process_media_msg(&g_session.rx);
-#endif
             } else if (&g_session.tx == events[i].data.ptr) {
                 //printf("epoll notification TX: Data on data ptr %p\n", events[i].data.ptr);
                 rtcmedia_process_media_msg(&g_session.tx);
