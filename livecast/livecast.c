@@ -321,6 +321,9 @@ mb_status_t mb_create_send_trickle_ice_candidate(
         return MB_TRANSPORT_FAIL;
     }
 
+    json_decref(root);
+    free(cmd);
+
 #if 0
     printf("Trickle ICE Message of length [%d] : send to peer:\n%s\n", 
                                                                 len1, iceattr1);
@@ -526,6 +529,9 @@ mb_status_t mb_create_send_answer(
             fprintf(stderr, "Error while sending answer to signaling server\n");
             return MB_TRANSPORT_FAIL;
         }
+
+        json_decref(root);
+        free(cmd);
 
         /* TODO; is it possible, less size data is sent? loop? */
         printf("Sent Answer to Signaling of Size: %d\n", strlen(cmd));
