@@ -138,8 +138,8 @@ mb_status_t rtcmedia_process_offer(json_t *msg) {
     }
 
     s->tx_sdp = sdp_session(parser);
-    if (sdp == NULL) {
-        printf("SDP parsing error\n");
+    if (s->tx_sdp == NULL) {
+        printf("SDP parsing error2: %s\n", sdp_parsing_error(parser));
         return MB_INVALID_PARAMS;
     }
 
@@ -231,6 +231,12 @@ mb_status_t rtcmedia_process_ice_candidate(json_t *msg) {
     }
  
     fprintf(stderr, "Found the rtc participant [id=%s] for the received media\n", p->id);
+
+    if (!p->pc) {
+        fprintf(stderr, "PeerConn handle NULL. "\
+                "Ignoring received trickled ice candidate\n");
+        return MB_INVALID_PARAMS;
+    }
 
     /*
      * This will only work with Chrome (and Opera) probably for now
