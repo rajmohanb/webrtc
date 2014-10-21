@@ -397,15 +397,18 @@ mb_status_t dtls_srtp_session_inject_data(handle h_dtls,
 
                 if (s->digest_type == DTLS_SHA1) {
                     tmp_d = EVP_sha1();
+                    fprintf(stderr, "[DTLS]: Peer Digest type: SHA1\n");
                 } else if (s->digest_type == DTLS_SHA256) {
                     tmp_d = EVP_sha256();
+                    fprintf(stderr, "[DTLS]: Peer Digest type: SHA256\n");
                 } else {
+                    fprintf(stderr, "[DTLS]: Unsupported Digest type\n");
                     return MB_NOT_SUPPORTED;
                 }
 
                 X509_digest(peer_cert, tmp_d, s->peer_fp, &s->peer_fp_len);
 
-                printf("PEER CERTIFICATE FINGERPRINT: ");
+                printf("PEER CERTIFICATE [Len=%d] FINGERPRINT: ", s->peer_fp_len);
 
                 for (i = 0; i < s->peer_fp_len; i++) {
                     printf("%02X:", s->peer_fp[i]);
@@ -437,6 +440,8 @@ mb_status_t dtls_srtp_session_get_peer_fingerprint(
     if (s->state != DTLS_SRTP_READY) return MB_NOT_FOUND;
 
     if (*fp_len < s->peer_fp_len) return MB_MEM_INSUF;
+
+    fprintf(stderr, "[DTLS]: Peer FP Len %d\n", s->peer_fp_len);
 
     /* TODO; use memcpy? */
     strncpy((char *)fp, (char *)s->peer_fp, s->peer_fp_len);

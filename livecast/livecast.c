@@ -9,6 +9,7 @@
 #include <sys/time.h>
 #include <sys/epoll.h>
 #include <ifaddrs.h>
+#include <errno.h>
 
 #include <sdp.h>
 
@@ -888,8 +889,10 @@ int main(int argc, char **argv) {
 
         n = epoll_wait(g_epfd, events, EPOLL_MAX_EVENTS, -1);
         if (n == -1) {
-            perror("EPOLL wait ");
-            fprintf(stderr, "EPOLL wait returned error\n");
+            if (errno != EINTR) {
+                perror("EPOLL wait ");
+                fprintf(stderr, "EPOLL wait returned error\n");
+            }
             continue;
         }
 
