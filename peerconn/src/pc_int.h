@@ -81,9 +81,9 @@ typedef struct {
     /* peer sock addr */
     struct sockaddr_in peer_addr;
 
-    /* TODO; only inbound for now */
     /* srtp session */
     srtp_t srtp_in;
+    srtp_t srtp_ob;
 
     /* srtp keying material from dtls (client key, salt & server key, salt */
     unsigned char keying_material[SRTP_MASTER_KEY_LEN * 2];
@@ -93,8 +93,8 @@ typedef struct {
     /* TODO; 
      * Chrome only as of now, assumption is BUNDLE is used and rtcp-mux is used
      */
-    /* only inbound data for now */
     srtp_policy_t in_policy;
+    srtp_policy_t ob_policy;
 } pc_ctxt_t;
 
 

@@ -66,8 +66,8 @@ void dtls_srtp_send_any_pending_data(dtls_srtp_session_t *s) {
     printf("SSL SINK BIO PENDING BYTES: %d\n", pending);
 
     if (pending) {
-        //char buf[pending];
         if (s->sent_msg) {
+            /* send(retransmit) before free? */
             free(s->sent_msg);
         }
 

@@ -144,6 +144,7 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
     unsigned char peer_fp[EVP_MAX_MD_SIZE] = {0};
     char *ptr, fingerprint[MAX_DTLS_FINGERPRINT_KEY_LEN] = {0};
     unsigned char in_policy_key[SRTP_MASTER_KEY_LEN];
+    unsigned char ob_policy_key[SRTP_MASTER_KEY_LEN];
     err_status_t err;
 
     ptr = fingerprint;
@@ -209,29 +210,32 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
     }
 
     memset(&in_policy_key, 0, sizeof(in_policy_key));
+    memset(&ob_policy_key, 0, sizeof(ob_policy_key));
 
     /* setup srtp session(s) */
     crypto_policy_set_rtp_default(&ctxt->in_policy.rtp);
     crypto_policy_set_rtcp_default(&ctxt->in_policy.rtcp);
 
+    crypto_policy_set_rtp_default(&ctxt->ob_policy.rtp);
+    crypto_policy_set_rtcp_default(&ctxt->ob_policy.rtcp);
+
+    /* incoming policy */
+    ctxt->in_policy.ssrc.type = ssrc_any_inbound;
+    ctxt->in_policy.key = in_policy_key;
+    memcpy(ctxt->in_policy.key, ctxt->peer_key, SRTP_KEY_LEN);
+    memcpy((ctxt->in_policy.key+SRTP_KEY_LEN), ctxt->peer_salt, SRTP_SALT_LEN);
+
+    /* outgoing policy */
+    ctxt->ob_policy.ssrc.type = ssrc_any_outbound;
+    ctxt->ob_policy.key = ob_policy_key;
+    memcpy(ctxt->ob_policy.key, ctxt->local_key, SRTP_KEY_LEN);
+    memcpy((ctxt->ob_policy.key+SRTP_KEY_LEN), ctxt->local_salt, SRTP_SALT_LEN);
+
     if (ctxt->dir == PC_MEDIA_RECVONLY) {
-
-        printf("PEERCONN MEDIA DIRECTION: RECVONLY\n");
-        ctxt->in_policy.ssrc.type = ssrc_any_inbound;
-        ctxt->in_policy.key = in_policy_key;
-        memcpy(ctxt->in_policy.key, ctxt->peer_key, SRTP_KEY_LEN);
-        memcpy((ctxt->in_policy.key+SRTP_KEY_LEN), ctxt->peer_salt, SRTP_SALT_LEN);
+        fprintf(stderr, "PEERCONN MEDIA DIRECTION: RECVONLY\n");
     } else if (ctxt->dir == PC_MEDIA_SENDONLY) {
-
-        printf("PEERCONN MEDIA DIRECTION: SENDONLY\n");
-        /* TODO; rename generic as media_policy? */
-        ctxt->in_policy.ssrc.type = ssrc_any_outbound;
-        ctxt->in_policy.key = in_policy_key;
-        memcpy(ctxt->in_policy.key, ctxt->local_key, SRTP_KEY_LEN);
-        memcpy((ctxt->in_policy.key+SRTP_KEY_LEN), 
-                ctxt->local_salt, SRTP_SALT_LEN);
+        fprintf(stderr, "PEERCONN MEDIA DIRECTION: SENDONLY\n");
     } else {
-
         fprintf(stderr, 
                 "We do not support this media direction %d. TODO\n", ctxt->dir);
         return MB_NOT_SUPPORTED;
@@ -247,11 +251,24 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
         return MB_INT_ERROR;
     }
 
+    /* now for outgoing */
+    ctxt->ob_policy.window_size = 1024;  /* optimal value? */
+    ctxt->ob_policy.allow_repeat_tx = 0; /* TODO; Chrome sets it to 1? */
+    ctxt->ob_policy.next = NULL;
+
+    err = srtp_create(&ctxt->srtp_ob, &ctxt->ob_policy);
+    if (err != err_status_ok) {
+        fprintf(stderr, "Creation of inbound srtp session failed\n");
+        return MB_INT_ERROR;
+    }
+
     ctxt->state = PC_ACTIVE;
 
     fprintf(stderr, "PC Session moved to PC_ACTIVE state\n");
 
     return MB_OK;
+
+    /* TODO: error handling */
 }
 
 
@@ -271,10 +288,9 @@ mb_status_t pc_utils_process_srtp_packet(
 
         err = srtp_unprotect_rtcp(ctxt->srtp_in, buf, &rtp_len);
         if (err != err_status_ok) {
-            /* Hack! to reduce console printf for now, to be removed later TODO */
-            if (ctxt->dir == PC_MEDIA_RECVONLY)
-                fprintf(stderr, "SRTCP unprotect() returned error %d. Starting "\
-                    "byte %d. Payload type byte: %d Context: %p\n", err, *buf, pt, ctxt);
+            fprintf(stderr, "SRTCP unprotect() returned error %d. "\
+                    "Starting byte %d. Payload type byte: %d Context: %p\n", 
+                    err, *buf, pt, ctxt);
             return MB_INVALID_PARAMS;
         }
 
@@ -319,7 +335,7 @@ mb_status_t pc_utils_send_media_to_peer(
     //fprintf(stderr, "TX Payload Type: %d Len: %d\n", pt, len);
     if ((pt > 191) && (pt < 210)) {
 
-        err = srtp_protect_rtcp(ctxt->srtp_in, buf, &buf_len);
+        err = srtp_protect_rtcp(ctxt->srtp_ob, buf, &buf_len);
         if (err != err_status_ok) {
             fprintf(stderr, "SRTP protect() for RTCP returned error %d\n", err);
             return MB_INVALID_PARAMS;
@@ -327,7 +343,7 @@ mb_status_t pc_utils_send_media_to_peer(
         //fprintf(stderr, "SRTP protected RTCP packet Type: %d Len: %d\n", pt, buf_len);
     } else {
 
-        err = srtp_protect(ctxt->srtp_in, buf, &buf_len);
+        err = srtp_protect(ctxt->srtp_ob, buf, &buf_len);
         if (err != err_status_ok) {
             fprintf(stderr, "SRTP protect() for RTP returned error %d\n", err);
             return MB_INVALID_PARAMS;
