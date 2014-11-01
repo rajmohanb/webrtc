@@ -13,8 +13,8 @@
 *                                                                              *
 *******************************************************************************/
 
-#ifndef RTC_MEDIA__H
-#define RTC_MEDIA__H
+#ifndef RTCP__H
+#define RTCP_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,56 +22,14 @@ extern "C" {
 
 /******************************************************************************/
 
+mb_status_t rtcp_parse_packet(char *buf, int len);
 
-#define MB_LIVECAST_MAX_RECEIVERS   10
+mb_status_t rtcp_send_rr(void);
+mb_status_t rtcp_send_pli(void);
+mb_status_t rtcp_send_fir(void);
 
-typedef enum {
-
-    LIVECAST_INIT,
-    LIVECAST_BC_OFFER_SENT,
-    LIVECAST_BC_LIVE,
-
-} livecast_state_t;
-
-
-typedef struct {
-
-    handle pc;
-    int fd;
-    char *id;
-    bool is_broadcaster;
-
-    bool intra_frame_requested;
-
-    pc_local_media_desc_t local_desc;
-
-    void *session;
-} rtc_participant_t;
-
-
-typedef struct {
-
-    livecast_state_t state;
-
-    rtc_participant_t tx;
-    sdp_session_t *tx_sdp;
-
-    /* TODO; move these ssrc's into rtc_participant_t? */
-    uint32_t tx_vid_ssrc1;
-    uint32_t tx_vid_ssrc2;
-    uint32_t tx_aud_ssrc;
-    uint32_t tx_app_ssrc;
-
-    uint32_t my_vid_ssrc1;
-    uint32_t my_vid_ssrc2;
-    uint32_t my_aud_ssrc;
-    uint32_t my_app_ssrc;
-
-    int cur_rx_count;
-    rtc_participant_t rx[MB_LIVECAST_MAX_RECEIVERS];
-
-} rtc_bcast_session_t;
-
+mb_status_t rtcp_create_fir(unsigned char *buf, 
+        uint32_t *len, uint32_t sender_ssrc, uint32_t target_ssrc);
 
 
 /******************************************************************************/

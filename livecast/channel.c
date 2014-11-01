@@ -62,6 +62,12 @@ mb_status_t rtcmedia_process_new_channel_req(json_t *msg) {
     p->is_broadcaster = true;
     p->session = s;
 
+    /* generate new ssrcs */
+    s->my_vid_ssrc1 = 323445672;
+    s->my_vid_ssrc2 = 986765443;
+    s->my_aud_ssrc = 658750432;
+    s->my_app_ssrc = 132407700;
+
     fprintf(stderr, "New channel created with broadcaster id: %s\n", p->id);
 
     return status;
@@ -390,6 +396,7 @@ mb_status_t rtcmedia_add_new_participant(json_t *msg) {
     /* this participant is the broadcaster? */
     p->is_broadcaster = false;
     p->session = s;
+    p->intra_frame_requested = false;
 
     fprintf(stderr, "New participant created with receiver id: %s\n", p->id);
 

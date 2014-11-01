@@ -22,7 +22,7 @@ INCLUDE := -I. -I../ -I../peerconn/inc -I../ext_libs/include
 
 MB_WEBRTC_LIBS := ../peerconn/src/libpc.a ../ext_libs/libs/libsdp.a \
 	../ext_libs/libs/libsu.a ../ext_libs/libs/lib_trickleice.a \
-	../dtls_srtp/src/libdtls_srtp.a \
+	../dtls_srtp/src/libdtls_srtp.a ../rtcp/src/librtcp.a \
 	../ext_libs/libs/lib_turn.a ../ext_libs/libs/lib_ice_conncheck.a \
 	../ext_libs/libs/lib_stun_txn.a ../ext_libs/libs/lib_stun_encdec.a \
 	../ext_libs/libs/lib_stun_msg.a ../ext_libs/libs/lib_stun_binding.a \

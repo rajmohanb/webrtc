@@ -193,6 +193,9 @@ mb_status_t pc_deinit(void);
 
 mb_status_t pc_inject_timer_event(pc_timer_event_t *event);
 
+mb_status_t pc_request_intra_video_frame(
+        handle peerconn, uint32_t our_ssrc, uint32_t peer_ssrc);
+
 
 /******************************************************************************/
 

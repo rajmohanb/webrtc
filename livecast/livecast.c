@@ -417,7 +417,11 @@ mb_status_t mb_create_send_answer(
             }
             else if (strncasecmp(attr->a_name, "ssrc-group", 10) == 0) {
                 char line[150] = {0};
-                sprintf(line, "FID %u %u", s->tx_vid_ssrc1, s->tx_vid_ssrc2);
+
+                if (p->is_broadcaster == true)
+                    sprintf(line, "FID %u %u", s->my_vid_ssrc1, s->my_vid_ssrc2);
+                else
+                    sprintf(line, "FID %u %u", s->tx_vid_ssrc1, s->tx_vid_ssrc2);
 
                 attr->a_value = strdup(line);
             }
@@ -429,19 +433,32 @@ mb_status_t mb_create_send_answer(
 
                 t++;
 
-                if (media->m_type == sdp_media_audio)
-                    sprintf(line, "%u %s", s->tx_aud_ssrc, t);
-                else if (media->m_type == sdp_media_video) {
-
-                    if (video_ssrc_attr_count < 4)
-                        sprintf(line, "%u %s", s->tx_vid_ssrc1, t);
+                if (media->m_type == sdp_media_audio) {
+                    if (p->is_broadcaster == true)
+                        sprintf(line, "%u %s", s->my_aud_ssrc, t);
                     else
-                        sprintf(line, "%u %s", s->tx_vid_ssrc2, t);
+                        sprintf(line, "%u %s", s->tx_aud_ssrc, t);
+                } else if (media->m_type == sdp_media_video) {
+
+                    if (video_ssrc_attr_count < 4) {
+                        if (p->is_broadcaster == true)
+                            sprintf(line, "%u %s", s->my_vid_ssrc1, t);
+                        else
+                            sprintf(line, "%u %s", s->tx_vid_ssrc1, t);
+                    } else {
+                        if(p->is_broadcaster == true) 
+                            sprintf(line, "%u %s", s->my_vid_ssrc2, t);
+                        else
+                            sprintf(line, "%u %s", s->tx_vid_ssrc2, t);
+                    }
 
                     video_ssrc_attr_count++;
+                } else {
+                    if (p->is_broadcaster == true)
+                        sprintf(line, "%u %s", s->my_app_ssrc, t);
+                    else
+                        sprintf(line, "%u %s", s->tx_app_ssrc, t);
                 }
-                else
-                    sprintf(line, "%u %s", s->tx_app_ssrc, t);
 
                 attr->a_value = strdup(line);
             }
@@ -816,7 +833,25 @@ void pc_incoming_media(handle pc,
         if (s->cur_rx_count == 0)
             return;
 
-    /* pipe it to the other peerconnection */
+    if (p->is_broadcaster == false) {
+        if (!s->tx.pc) return;
+
+        /* rewrite the ssrc before send? */
+
+        /* rtcp data from receiver, lets send it to broadcaster!!! */
+        status = pc_send_media_data(s->tx.pc, buf, len);
+        if (status != MB_OK) {
+            fprintf(stderr, "Sending of RTCP packet "\
+                    "from receiver of len [%d] to broadcaster failed\n", len);
+            return;
+        }
+
+        rtcp_parse_packet(buf, len);
+
+        //fprintf(stderr, "Sent RTCP packet of len %d to broadcaster\n", len);
+    }
+
+    /* data from broadcaster, pipe it to the receiver peerconnections */
     for (i = 0; i < MB_LIVECAST_MAX_RECEIVERS; i++) {
 
         r = &(s->rx[i]);
@@ -825,6 +860,16 @@ void pc_incoming_media(handle pc,
         status = pc_send_media_data(r->pc, buf, len);
         if (status != MB_OK) {
             fprintf(stderr, "Sending of broadcast media of len [%d] to receiver failed\n", len);
+        } else {
+            if (r->intra_frame_requested == false) {
+                status = pc_request_intra_video_frame(s->tx.pc, s->my_vid_ssrc1, s->tx_vid_ssrc1);
+                if (status != MB_OK) {
+                    fprintf(stderr, "Sending of FIR failed\n");
+                } else {
+                    r->intra_frame_requested = true;
+                    fprintf(stderr, "Sent RTCP FIR request. Hope we see IDR frame!\n");
+                }
+            }
         }
     }
 

@@ -15,14 +15,13 @@
 
 EXT_DEPS := /home/rajmohan/MindBricks/webrtc/ext_libs
 
-LIB := libpc.a
+LIB := librtcp.a
 
-SRC = pc.c pc_fsm.c pc_utils.c
+SRC = rtcp.c
 
-INCLUDE := -I. -I../../ -I../inc -I$(EXT_DEPS)/include -I../../dtls_srtp/inc \
-	-I../../rtcp/inc
+INCLUDE := -I. -I../../ -I../inc -I$(EXT_DEPS)/include -I../../dtls_srtp/inc
 
-CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE)
+CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE) -DIS_LITTLE_ENDIAN
 
 OBJS:=$(SRC:c=o)
 

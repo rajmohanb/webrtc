@@ -30,6 +30,8 @@
 
 #include <dtls_srtp.h>
 
+#include <rtcp.h>
+
 #include <pc.h>
 #include <pc_int.h>
 
@@ -505,6 +507,43 @@ mb_status_t pc_inject_timer_event(pc_timer_event_t *event) {
 
     return MB_OK;
 }
+
+
+mb_status_t pc_request_intra_video_frame(
+        handle peerconn, uint32_t our_ssrc, uint32_t peer_ssrc) {
+
+    mb_status_t status;
+    uint32_t i, buf_len = 1500;
+    uint8_t buf[1500];
+    pc_ctxt_t *ctxt = (pc_ctxt_t *)peerconn;
+
+    if (ctxt->state != PC_ACTIVE) {
+        fprintf(stderr, 
+                "Peer Connection not in active state. Current State: [%d]. "\
+                "Hence not sending FIR as requested to peer\n", ctxt->state);
+        return MB_INVALID_PARAMS;
+    }
+
+    status = rtcp_create_fir(buf, &buf_len, our_ssrc, peer_ssrc);
+    if (status != MB_OK) {
+        fprintf(stderr, "Unable to create RTCP FIR feedback message\n");
+        return status;
+    }
+
+    for (i = 0; i < buf_len; i+=4) {
+        printf("%02X %02X %02X %02X\n", buf[i], buf[i+1], buf[i+2], buf[i+3]);
+    }
+
+    status = pc_utils_send_media_to_peer(ctxt, buf, buf_len);
+    if (status != MB_OK) {
+        fprintf(stderr, "Error %d while sending RTCP FIR packet\n", status);
+    } else {
+        fprintf(stderr, "sent RTCP FIR packet of len %d\n", buf_len);
+    }
+
+    return status;
+}
+
 
 
 /******************************************************************************/
