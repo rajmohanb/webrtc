@@ -530,9 +530,11 @@ mb_status_t pc_request_intra_video_frame(
         return status;
     }
 
+#if 0
     for (i = 0; i < buf_len; i+=4) {
         printf("%02X %02X %02X %02X\n", buf[i], buf[i+1], buf[i+2], buf[i+3]);
     }
+#endif
 
     status = pc_utils_send_media_to_peer(ctxt, buf, buf_len);
     if (status != MB_OK) {

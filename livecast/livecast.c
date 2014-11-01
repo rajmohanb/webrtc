@@ -837,6 +837,7 @@ void pc_incoming_media(handle pc,
         if (!s->tx.pc) return;
 
         /* rewrite the ssrc before send? */
+        //rtcp_rewrite_source_ssrc(buf, len, s->my_vid_ssrc1);
 
         /* rtcp data from receiver, lets send it to broadcaster!!! */
         status = pc_send_media_data(s->tx.pc, buf, len);
@@ -846,7 +847,7 @@ void pc_incoming_media(handle pc,
             return;
         }
 
-        rtcp_parse_packet(buf, len);
+        //rtcp_parse_packet(buf, len);
 
         //fprintf(stderr, "Sent RTCP packet of len %d to broadcaster\n", len);
     }

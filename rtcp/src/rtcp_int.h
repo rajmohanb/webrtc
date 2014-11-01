@@ -80,9 +80,9 @@ typedef struct {
  * RTCP common header word
  */
 typedef struct {
-   unsigned int version:2;   /* protocol version */
-   unsigned int p:1;         /* padding flag */
    unsigned int count:5;     /* varies by packet type */
+   unsigned int p:1;         /* padding flag */
+   unsigned int version:2;   /* protocol version */
    unsigned int pt:8;        /* RTCP packet type */
    u_int16 length;           /* pkt len in words, w/o this word */
 } rtcp_common_t;
@@ -199,15 +199,15 @@ typedef struct {
    uint16_t fmt:5;       /* varies by packet type */
    uint16_t pt:8;        /* RTCP packet type */
 #endif
-   u_int16 length;           /* pkt len in words, w/o this word */
+   uint16_t length;      /* pkt len in words, w/o this word */
 } rtcp_fb_common_t;
 
 
 typedef struct {
 
     rtcp_fb_common_t common;
-    u_int32 ssrc_sender;     /* ssrc of packet sender */
-    u_int32 ssrc_src;        /* ssrc of media source */
+    uint32_t ssrc_sender;     /* ssrc of packet sender */
+    uint32_t ssrc_src;        /* ssrc of media source */
 
     union {
 
