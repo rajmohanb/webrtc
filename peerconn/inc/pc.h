@@ -45,10 +45,14 @@ extern "C" {
 
 #define PC_TIMER_PORT           12345 
 
+#define PC_ICE_TIMER            1
+#define PC_DTLS_TIMER           2
+
 typedef struct
 {
     void *timer_id;
     void *arg;
+    uint8_t timer_type;
 } pc_timer_event_t;
 
 

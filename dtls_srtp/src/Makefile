@@ -21,7 +21,7 @@ SRC = dtls_srtp.c
 
 INCLUDE := -I. -I../../ -I../inc -I$(EXT_DEPS)/include
 
-CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE)
+CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE) #-fsanitize=address -fno-omit-frame-pointer
 
 OBJS:=$(SRC:c=o)
 

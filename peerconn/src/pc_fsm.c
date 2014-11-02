@@ -214,6 +214,7 @@ static mb_status_t pc_peer_media (pc_ctxt_t *ctxt, handle msg, handle param) {
         ctxt->my_dtls_role = PC_DTLS_ACTIVE;
     else {
         fprintf(stderr,"Unsupported Peer DTLS Role %d\n", ctxt->peer_dtls_role);
+        ctxt->state = PC_DEAD;
         return MB_INT_ERROR;
     }
 

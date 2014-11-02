@@ -29,7 +29,9 @@ MB_WEBRTC_LIBS := ../peerconn/src/libpc.a ../ext_libs/libs/libsdp.a \
 	../ext_libs/libs/lib_platform.a ../ext_libs/libs/libsrtp.a \
 	-lssl -lcrypto -ljansson -lm -lrt -ldl -lpthread
 
-CFLAGS += -g -Wall -Wstrict-prototypes -c $(INCLUDE) -DLINUX
+CFLAGS += -g -Wall -Wstrict-prototypes -c $(INCLUDE) -DLINUX #-fsanitize=address -fno-omit-frame-pointer
+
+LFLAGS = #-fsanitize=address -fno-omit-frame-pointer
 
 OBJ:=$(SRC:c=o)
 
@@ -41,7 +43,7 @@ $(TARGET) : clean $(MB_WEBRTC_APP)
 
 $(MB_WEBRTC_APP): $(OBJ)
 	@echo "Creating webrtc application sample... " $(MB_WEBRTC_APP) 
-	$(CC) $(OBJ) -o $(MB_WEBRTC_APP) $(MB_WEBRTC_LIBS)
+	$(CC) $(LFLAGS) $(OBJ) -o $(MB_WEBRTC_APP) $(MB_WEBRTC_LIBS)
 
 clean:
 	@echo "Removing all sample ... "

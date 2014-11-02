@@ -176,7 +176,7 @@ mb_status_t rtcmedia_process_offer(json_t *msg) {
     /* set local media description */
     status = pc_set_local_media_description(p->pc, &p->local_desc);
     if (status != MB_OK) {
-        printf("Settng of remote sdp failed\n");
+        printf("Settng of local sdp failed\n");
         return status;
     }
 
