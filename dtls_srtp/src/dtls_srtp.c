@@ -444,7 +444,8 @@ mb_status_t dtls_srtp_session_get_peer_fingerprint(
     fprintf(stderr, "[DTLS]: Peer FP Len %d\n", s->peer_fp_len);
 
     /* TODO; use memcpy? */
-    strncpy((char *)fp, (char *)s->peer_fp, s->peer_fp_len);
+    //strncpy((char *)fp, (char *)s->peer_fp, s->peer_fp_len);
+    memcpy(fp, s->peer_fp, s->peer_fp_len);
     *fp_len = s->peer_fp_len;
 
     return MB_OK;
