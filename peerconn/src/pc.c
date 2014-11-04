@@ -140,6 +140,8 @@ static void pc_dtls_timer_expiry_cb (void *timer_id, void *arg)
 
     platform_memset((char *) &dest, 0, sizeof(dest));
 
+    fprintf(stderr, "DTLS SRTP Timer expired for arg [%p]\n", arg);
+
     MB_LOG (MBLOG_DEBUG,
             "[PC] in peerconn timer callback %d %p", timer_id, arg);
 
@@ -200,6 +202,8 @@ static int32_t pc_stop_timer (handle timer_id)
 static handle pc_dtls_start_timer (uint32_t duration, handle arg)
 {
     timer_expiry_callback timer_cb = pc_dtls_timer_expiry_cb;
+
+    fprintf(stderr, "DTLS SRTP Timer started for arg [%p]\n", arg);
 
     return platform_start_timer(duration, timer_cb, arg);
 }
@@ -366,7 +370,7 @@ mb_status_t pc_init(pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb
 
     /* initialize the dtls_srtp library */
     status = dtls_srtp_init(
-            pc_send_dtls_srtp_data, pc_start_timer, pc_stop_timer);
+            pc_send_dtls_srtp_data, pc_dtls_start_timer, pc_stop_timer);
     if (status != MB_OK) {
         fprintf(stderr, "DTLS_SRTP module initialization failed\n");
         return status;
@@ -537,31 +541,36 @@ mb_status_t pc_inject_timer_event(pc_timer_event_t *event) {
 
     int32_t status;
     handle ice_session;
+    mb_status_t mb_status = MB_OK;
 
-#if 0
-    fprintf(stderr, "PC Timer fired. TimerID: %p and Arg:%p\n", 
-                                            event->timer_id, event->arg);
-#endif
 
     if (event->timer_type == PC_ICE_TIMER) {
+
+#if 0
+        fprintf(stderr, "PC Timer fired. TimerID: %p and Arg:%p\n", 
+                                            event->timer_id, event->arg);
+#endif
 
         /* this does not need to go through the pc fsm */
         status = ice_session_inject_timer_event(
                             event->timer_id, event->arg, &ice_session);
         if (status != STUN_OK) {
             fprintf(stderr, "ICE stack timer event, returned %d\n", status);
+            mb_status = MB_INT_ERROR;
         }
     } else if (event->timer_type == PC_DTLS_TIMER) {
 
-        if (status != STUN_OK) {
-            status = dtls_srtp_inject_timer_event(event->timer_id, event->arg);
-            if (status != MB_OK) {
-                fprintf(stderr, "Error! DTLS timer event, returned %d\n", status);
-            }
+        fprintf(stderr, "DTLS Timer fired. TimerID: %p and Arg:%p\n", 
+                                            event->timer_id, event->arg);
+        status = dtls_srtp_inject_timer_event(event->timer_id, event->arg);
+        if (status != MB_OK) {
+            fprintf(stderr, "Error! DTLS timer event, returned %d\n", status);
+            mb_status = MB_INT_ERROR;
         }
     } else {
 
         fprintf(stderr, "Unknown timer type %d event fired\n", event->timer_type);
+        mb_status = MB_INVALID_PARAMS;
     }
 
     /*
@@ -572,7 +581,7 @@ mb_status_t pc_inject_timer_event(pc_timer_event_t *event) {
      */
 
 
-    return MB_OK;
+    return mb_status;
 }
 
 
