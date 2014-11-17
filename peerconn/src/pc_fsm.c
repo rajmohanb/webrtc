@@ -93,6 +93,15 @@ static pc_fsm_handler
         pc_ignore_msg,
         pc_ignore_msg,
     },
+    /* PC_DC_IN_PROGRESS */
+    {
+        pc_ignore_msg,
+        pc_ignore_msg,
+        pc_data,
+        pc_ignore_msg,
+        pc_ignore_msg,
+        pc_ignore_msg,
+    },
     /* PC_ACTIVE */
     {
         pc_ignore_msg,

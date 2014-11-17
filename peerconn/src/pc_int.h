@@ -32,6 +32,7 @@ typedef enum {
     PC_BORN,
     PC_ICE_IN_PROGRESS,
     PC_DTLS_IN_PROGRESS,
+    PC_DC_IN_PROGRESS,
     PC_ACTIVE,
     PC_DEAD,
     PC_STATE_MAX,

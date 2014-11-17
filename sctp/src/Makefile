@@ -19,7 +19,7 @@ LIB := libsctp.a
 
 SRC = sctp.c
 
-INCLUDE := -I. -I../../ -I../inc -I$(EXT_DEPS)/include
+INCLUDE := -I. -I../../ -I../inc -I$(EXT_DEPS)/include -DINET -DINET6
 
 CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE) #-fsanitize=address -fno-omit-frame-pointer
 

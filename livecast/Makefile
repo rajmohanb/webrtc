@@ -23,13 +23,14 @@ INCLUDE := -I. -I../ -I../peerconn/inc -I../ext_libs/include
 MB_WEBRTC_LIBS := ../peerconn/src/libpc.a ../ext_libs/libs/libsdp.a \
 	../ext_libs/libs/libsu.a ../ext_libs/libs/lib_trickleice.a \
 	../dtls_srtp/src/libdtls_srtp.a ../rtcp/src/librtcp.a \
+	../sctp/src/libsctp.a ../ext_libs/libs/libusrsctp.a \
 	../ext_libs/libs/lib_turn.a ../ext_libs/libs/lib_ice_conncheck.a \
 	../ext_libs/libs/lib_stun_txn.a ../ext_libs/libs/lib_stun_encdec.a \
 	../ext_libs/libs/lib_stun_msg.a ../ext_libs/libs/lib_stun_binding.a \
 	../ext_libs/libs/lib_platform.a ../ext_libs/libs/libsrtp.a \
 	-lssl -lcrypto -ljansson -lm -lrt -ldl -lpthread
 
-CFLAGS += -g -Wall -Wstrict-prototypes -c $(INCLUDE) -DLINUX #-fsanitize=address -fno-omit-frame-pointer
+CFLAGS += -g -Wall -Wstrict-prototypes -c $(INCLUDE) -DLINUX -DINET -DINET6 #-fsanitize=address -fno-omit-frame-pointer
 
 LFLAGS = #-fsanitize=address -fno-omit-frame-pointer
 

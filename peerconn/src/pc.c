@@ -30,6 +30,8 @@
 
 #include <dtls_srtp.h>
 
+#include <sctp.h>
+
 #include <rtcp.h>
 
 #include <pc.h>
@@ -378,6 +380,12 @@ mb_status_t pc_init(pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb
 
     /* initialize the rtp stack */
 
+    /* initialize the data channel (sctp) library */
+    status = dc_sctp_init();
+    if (status != MB_OK) {
+        fprintf(stderr, "Data Channel SCTP module initialization failed\n");
+        return status;
+    }
 
     pc_ice_cb = ice_cb;
     pc_media_cb = ic_media_cb;
@@ -393,6 +401,19 @@ PC_ERROR_EXIT1:
 mb_status_t pc_deinit(void) {
 
     int32_t ice_status;
+    mb_status_t status;
+
+    /* deinit the data channel (sctp) library */
+    status = dc_sctp_deinit();
+    if (status != MB_OK) {
+        fprintf(stderr, "Data Channel SCTP module de-initialization failed\n");
+    }
+
+
+    /* deinit the rtp library */
+
+
+    /* TODO: deinit the dtls_srtp library */
 
     ice_status = ice_destroy_instance(g_pc.ice_instance);
     if (ice_status != STUN_OK) {
@@ -400,6 +421,8 @@ mb_status_t pc_deinit(void) {
                 "Destroying of ice instance failed: %d\n", ice_status);
         return MB_INT_ERROR;
     }
+
+    /* TODO: deinit the platform */
 
     return MB_OK;
 }

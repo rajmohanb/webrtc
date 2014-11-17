@@ -23,16 +23,17 @@ extern "C" {
 /******************************************************************************/
 
 
-mb_status_t sctp_init(void);
+mb_status_t dc_sctp_init(void);
 
 
-mb_status_t sctp_create_association(handle *sctp);
+mb_status_t dc_sctp_create_association(
+                uint16_t local_port, uint16_t peer_port, handle *sctp);
 
 
-mb_status_t sctp_destroy_association(handle sctp);
+mb_status_t dc_sctp_destroy_association(handle sctp);
 
 
-mb_status_t sctp_deinit(void);
+mb_status_t dc_sctp_deinit(void);
 
 
 /******************************************************************************/

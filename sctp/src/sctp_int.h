@@ -42,15 +42,17 @@ typedef enum {
 
 
 typedef struct {
-} sctp_channel_t;
+} sctp_dc_channel_t;
 
 
 typedef struct {
-} sctp_stream_t;
+} sctp_dc_stream_t;
 
 
 typedef struct {
-} sctp_assoc_t;
+
+    struct socket *s;
+} sctp_dc_assoc_t;
 
 
 
