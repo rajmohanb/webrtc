@@ -22,7 +22,7 @@ SRC = pc.c pc_fsm.c pc_utils.c
 INCLUDE := -I. -I../../ -I../inc -I$(EXT_DEPS)/include -I../../dtls_srtp/inc \
 	-I../../rtcp/inc -I../../sctp/inc
 
-CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE) #-fsanitize=address -fno-omit-frame-pointer
+CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE) -DINET -DINET6 #-fsanitize=address -fno-omit-frame-pointer
 
 OBJS:=$(SRC:c=o)
 

@@ -96,6 +96,11 @@ typedef struct {
      */
     srtp_policy_t in_policy;
     srtp_policy_t ob_policy;
+
+    /* data channel */
+    uint16_t local_port;
+    uint16_t peer_port;
+    handle dc;
 } pc_ctxt_t;
 
 
@@ -125,6 +130,8 @@ mb_status_t pc_utils_process_srtp_packet(
 
 mb_status_t pc_utils_send_media_to_peer(
                 pc_ctxt_t *ctxt, uint8_t *media, uint32_t len);
+
+int pc_send_dtls_srtp_data (handle dtls, char *buf, int len, handle app_handle);
 
 
 /******************************************************************************/

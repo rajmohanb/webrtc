@@ -290,12 +290,14 @@ static void pc_session_state_change_handler(handle h_inst,
 int pc_send_dtls_srtp_data (
             handle dtls, char *buf, int len, handle app_handle) {
 
+    //char dest_ipaddr[48] = {0};
     pc_ctxt_t *ctxt = (pc_ctxt_t *) app_handle;
     int bytes = sendto(ctxt->sock_fd, buf, len, 0, 
             (struct sockaddr *)&ctxt->peer_addr, sizeof(struct sockaddr));
     if (bytes == -1) {
         perror("sendto ");
-        fprintf(stderr, "Error when sending DTLS data of size %d on socket\n", len);
+        fprintf(stderr, 
+                "Error when sending DTLS data of size %d on socket\n", len);
         return bytes;
     }
 
@@ -304,9 +306,49 @@ int pc_send_dtls_srtp_data (
                 "socket [%d] less than given size [%d]\n", bytes, len);
     }
 
-    //fprintf(stderr, "[PC] Sent %d bytes of DTLS_SRTP data\n", bytes);
+    fprintf(stderr, "[PC] Sent %d bytes of DTLS_SRTP data\n", bytes);
+#if 0
+    inet_ntop(AF_INET, &(ctxt->peer_addr.sin_addr), dest_ipaddr, ICE_IP_ADDR_MAX_LEN);
+
+    fprintf(stderr, "[PC] Sent %d bytes of DTLS_SRTP data %s:%d\n", 
+                                        bytes, dest_ipaddr, ctxt->peer_port);
+#endif
 
     return bytes;
+}
+
+
+
+static void pc_dtls_incoming_app_data(
+                handle dtls, char *buf, int len, handle app_handle) {
+
+    mb_status_t status;
+    pc_ctxt_t *ctxt = (pc_ctxt_t *)app_handle;
+
+    status = dc_sctp_association_inject_received_msg(ctxt->dc, buf, len);
+    if (status != MB_OK) {
+        fprintf(stderr, "SCTP data channel processing "\
+                "of received application message returned error\n");
+    }
+
+    return;
+}
+
+
+
+int pc_send_sctp_data (handle sctp, char *buf, int len, handle app_handle) {
+
+    int i;
+    mb_status_t status;
+    pc_ctxt_t *ctxt = (pc_ctxt_t *) app_handle;
+
+    status = dtls_srtp_session_send_app_data(ctxt->dtls, (uint8_t *)buf, len);
+    if (status != MB_OK) {
+        fprintf(stderr, "Failed to send SCTP data\n");
+        return -1;
+    }
+
+    return len;
 }
 
 
@@ -371,8 +413,8 @@ mb_status_t pc_init(pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb
 
 
     /* initialize the dtls_srtp library */
-    status = dtls_srtp_init(
-            pc_send_dtls_srtp_data, pc_dtls_start_timer, pc_stop_timer);
+    status = dtls_srtp_init(pc_send_dtls_srtp_data, 
+            pc_dtls_incoming_app_data, pc_dtls_start_timer, pc_stop_timer);
     if (status != MB_OK) {
         fprintf(stderr, "DTLS_SRTP module initialization failed\n");
         return status;
@@ -381,7 +423,7 @@ mb_status_t pc_init(pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb
     /* initialize the rtp stack */
 
     /* initialize the data channel (sctp) library */
-    status = dc_sctp_init();
+    status = dc_sctp_init(pc_send_sctp_data);
     if (status != MB_OK) {
         fprintf(stderr, "Data Channel SCTP module initialization failed\n");
         return status;

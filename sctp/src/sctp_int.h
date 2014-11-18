@@ -52,6 +52,9 @@ typedef struct {
 typedef struct {
 
     struct socket *s;
+
+    /* application blob */
+    handle app_handle;
 } sctp_dc_assoc_t;
 
 

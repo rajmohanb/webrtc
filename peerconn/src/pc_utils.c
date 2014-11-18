@@ -32,6 +32,9 @@
 
 #include <mb_types.h>
 
+/* data channel */
+#include <sctp.h>
+
 /* dtls */
 #include <dtls_srtp.h>
 
@@ -122,6 +125,10 @@ mb_status_t pc_utils_make_udp_transport_connected(pc_ctxt_t *ctxt) {
                 "%s: inet_pton() failed %d\n", peer->ip_addr, ret);
         return MB_INT_ERROR;
     }
+
+    /* store the local and remote ports for later use for data channel */
+    ctxt->local_port = selected_pair.media_list[0].pairs[0].local.port;
+    ctxt->peer_port = peer->port;
 
 #if 0
     if (connect(ctxt->sock_fd, (struct sockaddr *)&ctxt->peer_addr, 
@@ -262,9 +269,20 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
         return MB_INT_ERROR;
     }
 
-    ctxt->state = PC_ACTIVE;
+    /* data channel establishment happens after peerconn is done */
+    status = dc_sctp_create_association(
+                    5000, ctxt->peer_port, ctxt, &ctxt->dc);
+                    //ctxt->local_port, ctxt->peer_port, ctxt, &ctxt->dc);
+    if (status != MB_OK) {
+        fprintf(stderr, "Error [%d] while creating data "\
+                "connection. Hence peerconn session terminating\n", status);
+        ctxt->state = PC_DEAD;
+        return status;
+    }
 
-    fprintf(stderr, "PC Session moved to PC_ACTIVE state\n");
+    ctxt->state = PC_DC_IN_PROGRESS;
+
+    fprintf(stderr, "PC Session moved to PC_DC_IN_PROGRESS state\n");
 
     return MB_OK;
 

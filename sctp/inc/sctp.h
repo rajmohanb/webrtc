@@ -23,11 +23,19 @@ extern "C" {
 /******************************************************************************/
 
 
-mb_status_t dc_sctp_init(void);
+typedef int (*dc_sctp_send_data_cb) (
+            handle sctp, char *buf, int len, handle app_handle);
 
 
-mb_status_t dc_sctp_create_association(
-                uint16_t local_port, uint16_t peer_port, handle *sctp);
+mb_status_t dc_sctp_init(dc_sctp_send_data_cb);
+
+
+mb_status_t dc_sctp_create_association(uint16_t local_port, 
+                        uint16_t peer_port, handle app_handle, handle *sctp);
+
+
+mb_status_t dc_sctp_association_inject_received_msg(
+                                        handle sctp, void *data, uint32_t len);
 
 
 mb_status_t dc_sctp_destroy_association(handle sctp);

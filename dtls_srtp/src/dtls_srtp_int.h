@@ -58,6 +58,7 @@ typedef struct {
 #endif
 
     dtls_srtp_data_send_cb cb;
+    dtls_srtp_incoming_app_data_cb app_cb;
     dtls_srtp_start_timer_cb timer_start_cb;
     dtls_srtp_stop_timer_cb timer_stop_cb;
 

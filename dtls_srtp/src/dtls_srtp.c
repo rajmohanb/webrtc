@@ -81,19 +81,25 @@ void dtls_srtp_send_any_pending_data(dtls_srtp_session_t *s) {
             fprintf(stderr, "Error sending DTLS data. Sent "\
                     "only %d bytes against given %d bytes\n", sent, buf_len);
             /* TODO; what do we do now? error? */
+        } else {
+            //fprintf(stderr, "Sent DTLS data of len %d\n", sent);
         }
 
-        /* 
-         * minimal retransmission support for dtls handshake 
-         * messages as per RFC 4347.
-         */
-        s->timer_id = g_dtls_srtp.timer_start_cb(DTLS_RETX_TIMER_VAL, s);
-        if (s->timer_id) {
-            fprintf(stderr, "Started DTLS retransmission "\
-                    "timer for %d duration\n", DTLS_RETX_TIMER_VAL);
-        } else {
-            fprintf(stderr, "Starting DTLS retransmission "\
-                    "timer for %d duration FAILED\n", DTLS_RETX_TIMER_VAL);
+        /* no retransmission for application data. Only for handshake! */
+        if (s->state != DTLS_SRTP_READY) {
+
+            /* 
+             * minimal retransmission support for dtls handshake 
+             * messages as per RFC 4347.
+             */
+            s->timer_id = g_dtls_srtp.timer_start_cb(DTLS_RETX_TIMER_VAL, s);
+            if (s->timer_id) {
+                fprintf(stderr, "Started DTLS retransmission "\
+                        "timer for %d duration\n", DTLS_RETX_TIMER_VAL);
+            } else {
+                fprintf(stderr, "Starting DTLS retransmission "\
+                        "timer for %d duration FAILED\n", DTLS_RETX_TIMER_VAL);
+            }
         }
     }
 
@@ -102,8 +108,9 @@ void dtls_srtp_send_any_pending_data(dtls_srtp_session_t *s) {
 
 
 mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb, 
-        dtls_srtp_start_timer_cb start_timer_cb, 
-        dtls_srtp_stop_timer_cb stop_timer_cb) {
+                           dtls_srtp_incoming_app_data_cb app_cb, 
+                           dtls_srtp_start_timer_cb start_timer_cb, 
+                           dtls_srtp_stop_timer_cb stop_timer_cb) {
 
     const EVP_MD *digest;
     unsigned int n, pos;
@@ -194,6 +201,7 @@ mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb,
     }
 
     g_dtls_srtp.cb = cb;
+    g_dtls_srtp.app_cb = app_cb;
     g_dtls_srtp.timer_start_cb = start_timer_cb;
     g_dtls_srtp.timer_stop_cb = stop_timer_cb;
 
@@ -366,6 +374,8 @@ mb_status_t dtls_srtp_session_inject_data(handle h_dtls,
 
     *is_handshake_done = 0;
 
+    fprintf(stderr, "received dtls data from remote of len [%d]\n", len);
+
     written = BIO_write(s->src_bio, data, len);
     if (written) {
         if (s->state == DTLS_SRTP_HANDSHAKING) {
@@ -419,7 +429,22 @@ mb_status_t dtls_srtp_session_inject_data(handle h_dtls,
                 *is_handshake_done = 1;
             }
         } else {
-            /* TODO; we are ready */
+            /* TODO; we are ready, so these must be higher application data */
+            int bytes;
+            char *appdata = (char *) calloc(1, 1500);
+            if (appdata == NULL) {
+                fprintf(stderr, "Memory allocation failed\n");
+                return MB_MEM_ERROR;
+            }
+
+            bytes = SSL_read(s->ssl, appdata, 1500);
+
+            //fprintf(stderr, "Incoming => Number of bytes of Application data: %d\n", bytes);
+
+            /* pass to the application for further processing */
+            g_dtls_srtp.app_cb(s, appdata, bytes, s->app_handle);
+
+            /* Freeing of appdata memory is application responsibility */
         }
     } else {
         printf("BIO_write() returned error\n");
@@ -490,7 +515,12 @@ mb_status_t dtls_srtp_inject_timer_event(handle timer_id, handle arg) {
         return MB_INVALID_PARAMS;
     }
 
-    /* in case the session is in ready state, then sit pretty */
+    /* 
+     * in case the session is in ready state, then sit pretty. We need 
+     * re-transmission only for handshaking messages so that it is completed.
+     * For application data, we expect application protocol to handle the
+     * re-transmissions.
+     */
     if (s->state == DTLS_SRTP_READY) {
         fprintf(stderr, "The DTLS session has moved to READY state, hence "\
                 "ignoring any further retransmission. And ignoring current "\
@@ -533,6 +563,65 @@ mb_status_t dtls_srtp_deinit(void) {
     return MB_OK;
 }
 
+
+
+mb_status_t dtls_srtp_session_send_app_data(
+                handle h_dtls, uint8_t *data, int len) {
+
+    int ret;
+    dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
+
+    if (s->state != DTLS_SRTP_READY) return MB_NOT_FOUND;
+
+    ret = SSL_write(s->ssl, data, len);
+    if (ret <= 0) {
+        int what = SSL_get_error(s->ssl, ret);
+        printf("[%d] SSL_write: %d\n", ret, what);
+        switch(what) {
+            case SSL_ERROR_NONE:
+                printf("SSL_ERROR_NONE\n");
+                break;
+            case SSL_ERROR_ZERO_RETURN:
+                printf("SSL_ERROR_ZERO_RETURN\n");
+                break;
+            case SSL_ERROR_WANT_READ:
+                printf("SSL_ERROR_WANT_READ\n");
+                break;
+            case SSL_ERROR_WANT_WRITE:
+                printf("SSL_ERROR_WANT_WRITE\n");
+                break;
+            case SSL_ERROR_WANT_CONNECT:
+                printf("SSL_ERROR_WANT_CONNECT\n");
+                break;
+            case SSL_ERROR_WANT_ACCEPT:
+                printf("SSL_ERROR_WANT_ACCEPT\n");
+                break;
+            case SSL_ERROR_WANT_X509_LOOKUP:
+                printf("SSL_ERROR_WANT_X509_LOOKUP\n");
+                break;
+            case SSL_ERROR_SYSCALL:
+                printf("SSL_ERROR_SYSCALL\n");
+                break;
+            case SSL_ERROR_SSL:
+                printf("SSL_ERROR_SSL\n");
+                break;
+            default:
+                printf("SOME other SSL error\n");
+                break;
+        }
+
+        fprintf(stderr, "SSL_write() error\n");
+
+        return MB_INT_ERROR;
+    } else {
+
+        //fprintf(stderr, "Wrote [%d] bytes of app data to dtls session\n", ret);
+    }
+
+    dtls_srtp_send_any_pending_data(s);
+
+    return MB_OK;
+}
 
 
 /******************************************************************************/
