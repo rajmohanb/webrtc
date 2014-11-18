@@ -85,13 +85,88 @@ mb_status_t dc_sctp_init(dc_sctp_send_data_cb data_cb) {
 
 
 
+static void
+handle_notification(union sctp_notification *notif, size_t n)
+{
+	if (notif->sn_header.sn_length != (uint32_t)n) {
+		return;
+	}
+	switch (notif->sn_header.sn_type) {
+	case SCTP_ASSOC_CHANGE:
+		//handle_association_change_event(&(notif->sn_assoc_change));
+        printf("SCTP_ASSOC_CHANGE\n");
+		break;
+	case SCTP_PEER_ADDR_CHANGE:
+		//handle_peer_address_change_event(&(notif->sn_paddr_change));
+        printf("SCTP_PEER_ADDR_CHANGE\n");
+		break;
+	case SCTP_REMOTE_ERROR:
+        printf("SCTP_REMOTE_ERROR\n");
+		break;
+	case SCTP_SHUTDOWN_EVENT:
+        printf("SCTP_SHUTDOWN_EVENT\n");
+		break;
+	case SCTP_ADAPTATION_INDICATION:
+        printf("SCTP_ADAPTATION_INDICATION\n");
+		break;
+	case SCTP_PARTIAL_DELIVERY_EVENT:
+        printf("SCTP_PARTIAL_DELIVERY_EVENT\n");
+		break;
+	case SCTP_AUTHENTICATION_EVENT:
+        printf("SCTP_AUTHENTICATION_EVENT\n");
+		break;
+	case SCTP_SENDER_DRY_EVENT:
+        printf("SCTP_SENDER_DRY_EVENT\n");
+		break;
+	case SCTP_NOTIFICATIONS_STOPPED_EVENT:
+        printf("SCTP_NOTIFICATIONS_STOPPED_EVENT\n");
+		break;
+	case SCTP_SEND_FAILED_EVENT:
+		//handle_send_failed_event(&(notif->sn_send_failed_event));
+        printf("SCTP_SEND_FAILED_EVENT\n");
+		break;
+	case SCTP_STREAM_RESET_EVENT:
+        printf("SCTP_STREAM_RESET_EVENT\n");
+		break;
+	case SCTP_ASSOC_RESET_EVENT:
+        printf("SCTP_ASSOC_RESET_EVENT\n");
+		break;
+	case SCTP_STREAM_CHANGE_EVENT:
+        printf("SCTP_STREAM_CHANGE_EVENT\n");
+		break;
+	default:
+		break;
+	}
+}
+
+
+
 static int mb_receive_cb(struct socket *sock, 
         union sctp_sockstore addr, void *data, size_t datalen, 
         struct sctp_rcvinfo rcv, int flags, void *ulp_info)  {
 
     fprintf(stderr, " ***+++!!!!! Incoming DCEP MESSAGE of Len %d? ***====@@@@\n", datalen);
 
-    return 1;
+	if (data) {
+		if (flags & MSG_NOTIFICATION) {
+			handle_notification((union sctp_notification *)data, datalen);
+		} else {
+			printf("Msg of length %d received via %p:%u on stream %d with SSN %u and TSN %u, PPID %d, context %u.\n",
+			       (int)datalen,
+			       addr.sconn.sconn_addr,
+			       ntohs(addr.sconn.sconn_port),
+			       rcv.rcv_sid,
+			       rcv.rcv_ssn,
+			       rcv.rcv_tsn,
+			       ntohl(rcv.rcv_ppid),
+			       rcv.rcv_context);
+		}
+		free(data);
+	} else {
+		usrsctp_deregister_address(ulp_info);
+		usrsctp_close(sock);
+	}
+	return (1);
 }
 
 
