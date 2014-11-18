@@ -271,7 +271,7 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
 
     /* data channel establishment happens after peerconn is done */
     status = dc_sctp_create_association(
-                    5000, ctxt->peer_port, ctxt, &ctxt->dc);
+                    5000, 5000, ctxt, &ctxt->dc);
                     //ctxt->local_port, ctxt->peer_port, ctxt, &ctxt->dc);
     if (status != MB_OK) {
         fprintf(stderr, "Error [%d] while creating data "\

@@ -25,6 +25,10 @@ extern "C" {
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef MB_SCTP_DEBUG
+#include <arpa/inet.h>
+#endif
+
 #include <usrsctp.h>
 
 #include <mb_types.h>
@@ -34,7 +38,9 @@ extern "C" {
 
 
 static dc_sctp_send_data_cb sctp_out;
-
+#ifdef MB_SCTP_DEBUG
+static int debug_sock;
+#endif
 
 static void mb_sctp_debug_printf(const char *format, ...) {
 
@@ -70,6 +76,10 @@ mb_status_t dc_sctp_init(dc_sctp_send_data_cb data_cb) {
 
     sctp_out = data_cb;
 
+#ifdef MB_SCTP_DEBUG
+    debug_sock = socket(AF_INET, SOCK_DGRAM, 0);
+#endif
+
     return MB_OK;
 }
 
@@ -79,7 +89,7 @@ static int mb_receive_cb(struct socket *sock,
         union sctp_sockstore addr, void *data, size_t datalen, 
         struct sctp_rcvinfo rcv, int flags, void *ulp_info)  {
 
-    fprintf(stderr, " ***+++!!!!! Incoming DCEP MESSAGE? ***====@@@@\n");
+    fprintf(stderr, " ***+++!!!!! Incoming DCEP MESSAGE of Len %d? ***====@@@@\n", datalen);
 
     return 1;
 }
@@ -194,6 +204,22 @@ mb_status_t dc_sctp_create_association(uint16_t local_port,
 
 mb_status_t dc_sctp_association_inject_received_msg(
                                         handle sctp, void *data, uint32_t len) {
+
+#ifdef MB_SCTP_DEBUG
+    int bytes;
+    struct sockaddr_in debug_dest;
+
+    bzero(&debug_dest,sizeof(debug_dest));
+    debug_dest.sin_family = AF_INET;
+    debug_dest.sin_addr.s_addr=inet_addr("127.0.0.1");
+    debug_dest.sin_port=htons(33333);
+
+    bytes = sendto(debug_sock, data, len, 0, (struct sockaddr *)&debug_dest, sizeof(debug_dest));
+
+    if (bytes == -1) {
+        fprintf(stderr, "SCTP Debug: sending Received SCTP msg failed\n");
+    }
+#endif
 
     usrsctp_conninput(sctp, data, len, 0);
 

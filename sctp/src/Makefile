@@ -19,9 +19,9 @@ LIB := libsctp.a
 
 SRC = sctp.c
 
-INCLUDE := -I. -I../../ -I../inc -I$(EXT_DEPS)/include -DINET -DINET6
+INCLUDE := -I. -I../../ -I../inc -I$(EXT_DEPS)/include
 
-CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE) #-fsanitize=address -fno-omit-frame-pointer
+CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE) -DINET -DINET6 -DMB_SCTP_DEBUG #-fsanitize=address -fno-omit-frame-pointer
 
 OBJS:=$(SRC:c=o)
 
