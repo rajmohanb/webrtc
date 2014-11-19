@@ -86,6 +86,78 @@ mb_status_t dc_sctp_init(dc_sctp_send_data_cb data_cb) {
 
 
 static void
+handle_association_change_event(struct sctp_assoc_change *sac)
+{
+	unsigned int i, n;
+
+	printf("Association change ");
+	switch (sac->sac_state) {
+	case SCTP_COMM_UP:
+		printf("SCTP_COMM_UP");
+		break;
+	case SCTP_COMM_LOST:
+		printf("SCTP_COMM_LOST");
+		break;
+	case SCTP_RESTART:
+		printf("SCTP_RESTART");
+		break;
+	case SCTP_SHUTDOWN_COMP:
+		printf("SCTP_SHUTDOWN_COMP");
+		break;
+	case SCTP_CANT_STR_ASSOC:
+		printf("SCTP_CANT_STR_ASSOC");
+		break;
+	default:
+		printf("UNKNOWN");
+		break;
+	}
+	printf(", streams (in/out) = (%u/%u)",
+	       sac->sac_inbound_streams, sac->sac_outbound_streams);
+	n = sac->sac_length - sizeof(struct sctp_assoc_change);
+	if (((sac->sac_state == SCTP_COMM_UP) ||
+	     (sac->sac_state == SCTP_RESTART)) && (n > 0)) {
+		printf(", supports");
+		for (i = 0; i < n; i++) {
+			switch (sac->sac_info[i]) {
+			case SCTP_ASSOC_SUPPORTS_PR:
+				printf(" PR");
+				break;
+			case SCTP_ASSOC_SUPPORTS_AUTH:
+				printf(" AUTH");
+				break;
+			case SCTP_ASSOC_SUPPORTS_ASCONF:
+				printf(" ASCONF");
+				break;
+			case SCTP_ASSOC_SUPPORTS_MULTIBUF:
+				printf(" MULTIBUF");
+				break;
+			case SCTP_ASSOC_SUPPORTS_RE_CONFIG:
+				printf(" RE-CONFIG");
+				break;
+			default:
+				printf(" UNKNOWN(0x%02x)", sac->sac_info[i]);
+				break;
+			}
+		}
+	} else if (((sac->sac_state == SCTP_COMM_LOST) ||
+	            (sac->sac_state == SCTP_CANT_STR_ASSOC)) && (n > 0)) {
+		printf(", ABORT =");
+		for (i = 0; i < n; i++) {
+			printf(" 0x%02x", sac->sac_info[i]);
+		}
+	}
+	printf(".\n");
+	if ((sac->sac_state == SCTP_CANT_STR_ASSOC) ||
+	    (sac->sac_state == SCTP_SHUTDOWN_COMP) ||
+	    (sac->sac_state == SCTP_COMM_LOST)) {
+		exit(0);
+	}
+	return;
+}
+
+
+
+static void
 handle_notification(union sctp_notification *notif, size_t n)
 {
 	if (notif->sn_header.sn_length != (uint32_t)n) {
@@ -93,7 +165,7 @@ handle_notification(union sctp_notification *notif, size_t n)
 	}
 	switch (notif->sn_header.sn_type) {
 	case SCTP_ASSOC_CHANGE:
-		//handle_association_change_event(&(notif->sn_assoc_change));
+		handle_association_change_event(&(notif->sn_assoc_change));
         printf("SCTP_ASSOC_CHANGE\n");
 		break;
 	case SCTP_PEER_ADDR_CHANGE:
