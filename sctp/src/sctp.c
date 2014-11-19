@@ -85,9 +85,8 @@ mb_status_t dc_sctp_init(dc_sctp_send_data_cb data_cb) {
 
 
 
-static void
-handle_association_change_event(struct sctp_assoc_change *sac)
-{
+static void handle_association_change_event(struct sctp_assoc_change *sac) {
+
 	unsigned int i, n;
 
 	printf("Association change ");
@@ -157,9 +156,9 @@ handle_association_change_event(struct sctp_assoc_change *sac)
 
 
 
-static void
-handle_notification(union sctp_notification *notif, size_t n)
-{
+static void mb_sctp_handle_notification(
+        sctp_dc_assoc_t *ctxt, union sctp_notification *notif, size_t n) {
+
 	if (notif->sn_header.sn_length != (uint32_t)n) {
 		return;
 	}
@@ -213,32 +212,86 @@ handle_notification(union sctp_notification *notif, size_t n)
 
 
 
-static int mb_receive_cb(struct socket *sock, 
+static int mb_sctp_handle_message(sctp_dc_assoc_t *ctxt, 
+                    void *data, size_t datalen, struct sctp_rcvinfo *rcv) {
+
+    uint32_t ppid;
+
+#if 0
+	uint16_t rcv_sid;
+	uint16_t rcv_ssn;
+	uint16_t rcv_flags;
+	uint32_t rcv_ppid;
+	uint32_t rcv_tsn;
+	uint32_t rcv_cumtsn;
+	uint32_t rcv_context;
+	sctp_assoc_t rcv_assoc_id;
+#endif
+
+    ppid = ntohl(rcv->rcv_ppid);
+
+    printf("Msg of length %d received on stream %d with SSN %u and TSN %u, PPID %d, context %u.\n",
+           (int)datalen,
+           rcv->rcv_sid,
+           rcv->rcv_ssn,
+           rcv->rcv_tsn,
+           ntohl(rcv->rcv_ppid),
+           rcv->rcv_context);
+
+    switch(ppid) {
+
+        case WEBRTC_DCEP:
+            switch(*((char *)data)) {
+
+                case DCEP_DATA_CHANNEL_ACK:
+                break;
+                case DCEP_DATA_CHANNEL_OPEN:
+                break;
+                default:
+                break;
+            }
+        break;
+        case WEBRTC_STRING:
+        break;
+        case WEBRTC_BINARY_PARTIAL:
+        break;
+        case WEBRTC_BINARY:
+        break;
+        case WEBRTC_STRING_PARTIAL:
+        break;
+        case WEBTRC_STRING_EMPTY:
+        break;
+        case WEBRTC_BINARY_EMPTY:
+        break;
+        default:
+        break;
+    }
+
+    return 1;
+}
+
+
+
+static int mb_sctp_receive_cb(struct socket *sock, 
         union sctp_sockstore addr, void *data, size_t datalen, 
         struct sctp_rcvinfo rcv, int flags, void *ulp_info)  {
+
+    sctp_dc_assoc_t *ctxt = (sctp_dc_assoc_t *)ulp_info;
 
     fprintf(stderr, " ***+++!!!!! Incoming DCEP MESSAGE of Len %d? ***====@@@@\n", datalen);
 
 	if (data) {
 		if (flags & MSG_NOTIFICATION) {
-			handle_notification((union sctp_notification *)data, datalen);
+			mb_sctp_handle_notification(ctxt, (union sctp_notification *)data, datalen);
 		} else {
-			printf("Msg of length %d received via %p:%u on stream %d with SSN %u and TSN %u, PPID %d, context %u.\n",
-			       (int)datalen,
-			       addr.sconn.sconn_addr,
-			       ntohs(addr.sconn.sconn_port),
-			       rcv.rcv_sid,
-			       rcv.rcv_ssn,
-			       rcv.rcv_tsn,
-			       ntohl(rcv.rcv_ppid),
-			       rcv.rcv_context);
+            mb_sctp_handle_message(ctxt, data, datalen, &rcv);
+#if 0
+#endif
 		}
 		free(data);
-	} else {
-		usrsctp_deregister_address(ulp_info);
-		usrsctp_close(sock);
 	}
-	return (1);
+
+	return 1;
 }
 
 
@@ -278,7 +331,7 @@ mb_status_t dc_sctp_create_association(uint16_t local_port,
     ctxt->app_handle = app_handle;
 
     ctxt->s = usrsctp_socket(AF_CONN, 
-            SOCK_STREAM, IPPROTO_SCTP, mb_receive_cb, NULL, 0, (void *)ctxt);
+            SOCK_STREAM, IPPROTO_SCTP, mb_sctp_receive_cb, NULL, 0, (void *)ctxt);
     if (ctxt->s == NULL) {
         perror("usrsctp_socket ");
         fprintf(stderr, "Error while creating usrsctp_socket\n");
