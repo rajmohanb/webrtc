@@ -153,6 +153,7 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
     unsigned char in_policy_key[SRTP_MASTER_KEY_LEN];
     unsigned char ob_policy_key[SRTP_MASTER_KEY_LEN];
     err_status_t err;
+    uint16_t is_dtls_client = 1;
 
     ptr = fingerprint;
 
@@ -269,9 +270,14 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
         return MB_INT_ERROR;
     }
 
+    if (ctxt->my_dtls_role == PC_DTLS_ACTIVE)
+        is_dtls_client = 1;
+    else
+        is_dtls_client = 0;
+
     /* data channel establishment happens after peerconn is done */
     status = dc_sctp_create_association(
-                    5000, 5000, ctxt, &ctxt->dc);
+                    5000, 5000, is_dtls_client, ctxt, &ctxt->dc);
                     //ctxt->local_port, ctxt->peer_port, ctxt, &ctxt->dc);
     if (status != MB_OK) {
         fprintf(stderr, "Error [%d] while creating data "\

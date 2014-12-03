@@ -31,7 +31,8 @@ mb_status_t dc_sctp_init(dc_sctp_send_data_cb);
 
 
 mb_status_t dc_sctp_create_association(uint16_t local_port, 
-                        uint16_t peer_port, handle app_handle, handle *sctp);
+                                   uint16_t peer_port, uint16_t is_dtls_client, 
+                                   handle app_handle, handle *sctp);
 
 
 mb_status_t dc_sctp_association_inject_received_msg(

@@ -39,7 +39,7 @@ extern "C" {
 
 static dc_sctp_send_data_cb sctp_out;
 #ifdef MB_SCTP_DEBUG
-static int debug_sock;
+int debug_sock;
 #endif
 
 static void mb_sctp_debug_printf(const char *format, ...) {
@@ -50,6 +50,28 @@ static void mb_sctp_debug_printf(const char *format, ...) {
 	vprintf(format, ap);
 	va_end(ap);
 }
+
+
+#ifdef MB_SCTP_DEBUG
+void  mb_sctp_debug_packets(void *data, size_t datalen) {
+
+    int bytes;
+    struct sockaddr_in debug_dest;
+
+    bzero(&debug_dest,sizeof(debug_dest));
+    debug_dest.sin_family = AF_INET;
+    debug_dest.sin_addr.s_addr=inet_addr("127.0.0.1");
+    debug_dest.sin_port=htons(33333);
+
+    bytes = sendto(debug_sock, data, datalen, 0, (struct sockaddr *)&debug_dest, sizeof(debug_dest));
+
+    if (bytes == -1) {
+        fprintf(stderr, "SCTP Debug: sending Received SCTP msg failed\n");
+    }
+
+    return;
+}
+#endif
 
 
 static int mb_sctp_send_data(void *addr, 
@@ -241,15 +263,7 @@ static int mb_sctp_handle_message(sctp_dc_assoc_t *ctxt,
     switch(ppid) {
 
         case WEBRTC_DCEP:
-            switch(*((char *)data)) {
-
-                case DCEP_DATA_CHANNEL_ACK:
-                break;
-                case DCEP_DATA_CHANNEL_OPEN:
-                break;
-                default:
-                break;
-            }
+            sctp_dcep_handle_message(ctxt, data, datalen, rcv);
         break;
         case WEBRTC_STRING:
         break;
@@ -264,6 +278,10 @@ static int mb_sctp_handle_message(sctp_dc_assoc_t *ctxt,
         case WEBRTC_BINARY_EMPTY:
         break;
         default:
+        /* 
+         * TODO - draft-ietf-rtcweb-data-channel-12 Section 6.6
+         * if an unsupported ppid is rcvd, the data channel should be closed.
+         */
         break;
     }
 
@@ -297,7 +315,8 @@ static int mb_sctp_receive_cb(struct socket *sock,
 
 
 mb_status_t dc_sctp_create_association(uint16_t local_port, 
-                    uint16_t peer_port, handle app_handle, handle *sctp) {
+                                   uint16_t peer_port, uint16_t is_dtls_client, 
+                                   handle app_handle, handle *sctp) {
 
     uint16_t i;
     sctp_dc_assoc_t *ctxt;
@@ -393,6 +412,8 @@ mb_status_t dc_sctp_create_association(uint16_t local_port,
         }
     }
 
+    ctxt->is_dtls_client = is_dtls_client;
+
     /* we are done here? */
 
     *sctp = (handle) ctxt;
@@ -406,6 +427,8 @@ mb_status_t dc_sctp_association_inject_received_msg(
                                         handle sctp, void *data, uint32_t len) {
 
 #ifdef MB_SCTP_DEBUG
+    mb_sctp_debug_packets(data, len);
+#if 0
     int bytes;
     struct sockaddr_in debug_dest;
 
@@ -419,6 +442,7 @@ mb_status_t dc_sctp_association_inject_received_msg(
     if (bytes == -1) {
         fprintf(stderr, "SCTP Debug: sending Received SCTP msg failed\n");
     }
+#endif
 #endif
 
     usrsctp_conninput(sctp, data, len, 0);

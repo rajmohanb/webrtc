@@ -23,6 +23,20 @@ extern "C" {
 /******************************************************************************/
 
 
+/* max data channels per association */
+#define SCTP_MAX_DATA_CHANNELS  8
+/* max data streams in each direction per association */
+#define SCTP_MAX_DATA_STREAMS   SCTP_MAX_DATA_CHANNELS
+
+
+typedef enum {
+    DCEP_STREAM_STATE_MIN,
+    DCEP_STREAM_OPENING,
+    DCEP_STREAM_ACTIVE,
+    DCEP_STREAM_STATE_MAX,
+} sctp_dcep_stream_state_t;
+
+
 /* DCEP Message Types */
 typedef enum {
     DCEP_RESERVED_0 = 0x00,
@@ -60,7 +74,30 @@ typedef enum {
 } sctp_ppid_type_t;
 
 
+/* DATA_CHANNEL_OPEN message format */
 typedef struct {
+    uint8_t msg_type;
+    uint8_t channel_type;
+    uint16_t priority;
+    uint32_t reliability_param;
+
+    uint16_t label_len;
+    uint16_t protocol_len;
+
+    uint8_t *label;
+    uint8_t *protocol;
+} sctp_dc_open_msg_t;
+
+
+/* DATA_CHANNEL_ACK message format */
+typedef struct {
+    uint8_t msg_type;
+} sctp_dc_ack_msg_t;
+
+
+typedef struct {
+    /* reliable or unreliable */
+    uint32_t reliability_param; 
 } sctp_dc_channel_t;
 
 
@@ -70,7 +107,14 @@ typedef struct {
 
 typedef struct {
 
+    sctp_dc_channel_t channels[SCTP_MAX_DATA_CHANNELS];
+
+    sctp_dc_stream_t in_streams[SCTP_MAX_DATA_STREAMS];
+    sctp_dc_stream_t out_streams[SCTP_MAX_DATA_STREAMS];
+
     struct socket *s;
+
+    uint16_t is_dtls_client;
 
     /* application blob */
     handle app_handle;

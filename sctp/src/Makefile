@@ -17,11 +17,12 @@ EXT_DEPS := /home/rajmohan/MindBricks/webrtc/ext_libs
 
 LIB := libsctp.a
 
-SRC = sctp.c
+SRC = sctp.c sctp_dcep.c
 
 INCLUDE := -I. -I../../ -I../inc -I$(EXT_DEPS)/include
 
-CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE) -DINET -DINET6 -DMB_SCTP_DEBUG #-fsanitize=address -fno-omit-frame-pointer
+CFLAGS += -c -g -Wall -Wstrict-prototypes $(INCLUDE) -DINET -DINET6 \
+		  -DMB_SCTP_DEBUG #-fsanitize=address -fno-omit-frame-pointer
 
 OBJS:=$(SRC:c=o)
 
