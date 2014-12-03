@@ -31,8 +31,10 @@ extern "C" {
 
 typedef enum {
     DCEP_STREAM_STATE_MIN,
+    DCEP_STREAM_UNUSED,
     DCEP_STREAM_OPENING,
-    DCEP_STREAM_ACTIVE,
+    DCEP_STREAM_OPEN,
+    DCEP_STREAM_CLOSING,
     DCEP_STREAM_STATE_MAX,
 } sctp_dcep_stream_state_t;
 
@@ -96,17 +98,39 @@ typedef struct {
 
 
 typedef struct {
+
     /* reliable or unreliable */
+    sctp_dcep_channel_type_t channel_type;
     uint32_t reliability_param; 
+
+    /* in-order or out-of-order msg delivery */
+    uint8_t is_in_order;
+
+    /* priority */
+    uint16_t priority;
+
+    /* optional label */
+    char *label;
+
+    /* optional protocol */
+    char *protocol;
 } sctp_dc_channel_t;
 
 
 typedef struct {
+
+    sctp_dcep_stream_state_t state;
 } sctp_dc_stream_t;
 
 
 typedef struct {
 
+    /* imp - 
+     * In order to minimize the stream id lookup time, both the data channel 
+     * and the associated stream are indexed by the same number. It is assumed 
+     * that the stream ids will be numbered starting from 0 incrementally. That
+     * is, index is the stream id.
+     */
     sctp_dc_channel_t channels[SCTP_MAX_DATA_CHANNELS];
 
     sctp_dc_stream_t in_streams[SCTP_MAX_DATA_STREAMS];
@@ -120,6 +144,10 @@ typedef struct {
     handle app_handle;
 } sctp_dc_assoc_t;
 
+
+#ifdef MB_SCTP_DEBUG
+void  mb_sctp_debug_packets(void *data, size_t datalen);
+#endif
 
 
 /******************************************************************************/

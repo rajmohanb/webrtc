@@ -58,6 +58,7 @@ mb_status_t sctp_dcep_handle_data_channel_open(sctp_dc_assoc_t *ctxt,
     uint16_t sval, stream_id;
     uint32_t lval;
     uint8_t *msg = (uint8_t *)data;
+    sctp_dc_channel_t *dc;
     sctp_dc_open_msg_t *open = 
         (sctp_dc_open_msg_t *) calloc(1, sizeof(sctp_dc_open_msg_t));
 
@@ -144,7 +145,34 @@ mb_status_t sctp_dcep_handle_data_channel_open(sctp_dc_assoc_t *ctxt,
         return MB_OK;
     }
 
+    if (stream_id >= SCTP_MAX_DATA_STREAMS) {
+        fprintf(stderr, "Stream Id No %d received from peer is more than the "\
+                "implementation defined array. ERROR!!! TODO\n", stream_id);
+        /* TODO - close the channel */
+        return MB_OK;
+    }
+
     fprintf(stderr, "STREAM ID: %d\n", stream_id);
+
+    /* check if the received stream id is available */
+    if (ctxt->in_streams[stream_id].state != DCEP_STREAM_UNUSED) {
+        fprintf(stderr, "The stream id %d received from peer is already "\
+                "being used. TODO Need to close the data channel\n", stream_id);
+        /* TODO - close the channel */
+        return MB_OK;
+    }
+
+    /* the channel/stream is unused */
+    dc = &ctxt->channels[stream_id];
+
+    dc->is_reliable 
+    dc->reliability_param = open->reliability_param;
+    dc->is_in_order
+    dc->priority = open->priority;
+    if (open->label) dc->label = strdup(open->label);
+    if (open->protocol) dc->protocol = strdup(open->protocol);
+
+    /* send ack */
 
     return MB_OK;
 }
