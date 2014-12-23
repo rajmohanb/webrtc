@@ -52,13 +52,44 @@ mb_status_t sctp_dcep_handle_data_channel_ack(sctp_dc_assoc_t *ctxt,
 
 
 
+mb_status_t sctp_dcep_send_ack(sctp_dc_assoc_t *ctxt, uint16_t stream_id) {
+
+    sctp_dc_ack_msg_t ack;
+    struct sctp_sndinfo sndinfo;
+
+    memset(&ack, 0, sizeof(ack));
+    ack.msg_type = DCEP_DATA_CHANNEL_ACK;
+
+    /* send this across */
+    memset(&sndinfo, 0, sizeof(sndinfo));
+
+    sndinfo.snd_sid = stream_id;
+    sndinfo.snd_flags = SCTP_EOR;
+	sndinfo.snd_ppid = htonl(WEBRTC_DCEP);
+	//sndinfo.snd_context = 
+	//sndinfo.snd_assoc_id = 
+    if (usrsctp_sendv(ctxt->s, &ack, sizeof(sctp_dc_ack_msg_t), NULL, 
+                0, &sndinfo, sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0) < 0) {
+
+        fprintf(stderr, "usrsctp_sendv: Sending of DCEP ACK message failed\n");
+        return MB_TRANSPORT_FAIL;
+    }
+
+   fprintf(stderr, "sent DCEP ACK\n");
+
+    return MB_OK;
+}
+
+
+
 mb_status_t sctp_dcep_handle_data_channel_open(sctp_dc_assoc_t *ctxt, 
                         void *data, size_t datalen, struct sctp_rcvinfo *rcv) {
 
     uint16_t sval, stream_id;
     uint32_t lval;
+    mb_status_t status;
     uint8_t *msg = (uint8_t *)data;
-    sctp_dc_channel_t *dc;
+    sctp_dc_channel_t *channel;
     sctp_dc_open_msg_t *open = 
         (sctp_dc_open_msg_t *) calloc(1, sizeof(sctp_dc_open_msg_t));
 
@@ -81,7 +112,7 @@ mb_status_t sctp_dcep_handle_data_channel_open(sctp_dc_assoc_t *ctxt,
 
     if (open->label_len) {
 
-        open->label = (uint8_t *) calloc(1, open->label_len+1);
+        open->label = (char *) calloc(1, open->label_len+1);
         if (!open->label) return MB_MEM_ERROR;
 
         memcpy(open->label, msg, open->label_len);
@@ -90,7 +121,7 @@ mb_status_t sctp_dcep_handle_data_channel_open(sctp_dc_assoc_t *ctxt,
 
     if (open->protocol_len) {
 
-        open->protocol = (uint8_t *) calloc(1, open->protocol_len+1);
+        open->protocol = (char *) calloc(1, open->protocol_len+1);
         if (!open->protocol) return MB_MEM_ERROR;
 
         memcpy(open->protocol, msg, open->protocol_len);
@@ -99,8 +130,8 @@ mb_status_t sctp_dcep_handle_data_channel_open(sctp_dc_assoc_t *ctxt,
 
     fprintf(stderr, "DCEP OPEN - Msg Type: %d\n", open->msg_type);
     fprintf(stderr, "DCEP OPEN - Channel Type: %d\n", open->channel_type);
-    fprintf(stderr, "DCEP OPEN - Msg Type: %d\n", open->priority);
-    fprintf(stderr, "DCEP OPEN - Msg Type: %d\n", open->reliability_param);
+    fprintf(stderr, "DCEP OPEN - Priority: %d\n", open->priority);
+    fprintf(stderr, "DCEP OPEN - Reliability Param: %d\n", open->reliability_param);
 
     fprintf(stderr, "DCEP OPEN - Label Length: %d\n", open->label_len);
     fprintf(stderr, "DCEP OPEN - Protocol Length: %d\n", open->protocol_len);
@@ -163,18 +194,24 @@ mb_status_t sctp_dcep_handle_data_channel_open(sctp_dc_assoc_t *ctxt,
     }
 
     /* the channel/stream is unused */
-    dc = &ctxt->channels[stream_id];
+    channel = &ctxt->channels[stream_id];
 
-    dc->is_reliable 
-    dc->reliability_param = open->reliability_param;
-    dc->is_in_order
-    dc->priority = open->priority;
-    if (open->label) dc->label = strdup(open->label);
-    if (open->protocol) dc->protocol = strdup(open->protocol);
+    channel->channel_type = open->channel_type;
+    //channel->is_in_order - Depends on channel type above
+    //channel->is_reliable - Depends on channel type above
+    channel->reliability_param = open->reliability_param;
+    channel->priority = open->priority;
+    if (open->label) channel->label = strdup(open->label);
+    if (open->protocol) channel->protocol = strdup(open->protocol);
 
     /* send ack */
+    status = sctp_dcep_send_ack(ctxt, stream_id);
+    if (status != MB_OK) {
+        fprintf(stderr, "Error sending DATA_CHANNEL_ACK message\n");
+        return status;
+    }
 
-    return MB_OK;
+    return status;
 }
 
 

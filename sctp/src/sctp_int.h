@@ -30,7 +30,6 @@ extern "C" {
 
 
 typedef enum {
-    DCEP_STREAM_STATE_MIN,
     DCEP_STREAM_UNUSED,
     DCEP_STREAM_OPENING,
     DCEP_STREAM_OPEN,
@@ -86,8 +85,8 @@ typedef struct {
     uint16_t label_len;
     uint16_t protocol_len;
 
-    uint8_t *label;
-    uint8_t *protocol;
+    char *label;
+    char *protocol;
 } sctp_dc_open_msg_t;
 
 
