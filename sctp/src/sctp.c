@@ -428,21 +428,6 @@ mb_status_t dc_sctp_association_inject_received_msg(
 
 #ifdef MB_SCTP_DEBUG
     mb_sctp_debug_packets(data, len);
-#if 0
-    int bytes;
-    struct sockaddr_in debug_dest;
-
-    bzero(&debug_dest,sizeof(debug_dest));
-    debug_dest.sin_family = AF_INET;
-    debug_dest.sin_addr.s_addr=inet_addr("127.0.0.1");
-    debug_dest.sin_port=htons(33333);
-
-    bytes = sendto(debug_sock, data, len, 0, (struct sockaddr *)&debug_dest, sizeof(debug_dest));
-
-    if (bytes == -1) {
-        fprintf(stderr, "SCTP Debug: sending Received SCTP msg failed\n");
-    }
-#endif
 #endif
 
     usrsctp_conninput(sctp, data, len, 0);
