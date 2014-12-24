@@ -292,7 +292,7 @@ static int mb_sctp_handle_message(sctp_dc_assoc_t *ctxt,
             type = MB_SCTP_STRING_PARTIAL;
             break;
 
-        case WEBTRC_STRING_EMPTY:
+        case WEBRTC_STRING_EMPTY:
             fprintf(stderr, "Received WEBRTC EMPTY STRING data of len %d\n", datalen);
             type = MB_SCTP_STRING_EMPTY;
             break;
@@ -468,6 +468,81 @@ mb_status_t dc_sctp_association_inject_received_msg(
 
 mb_status_t dc_sctp_send_media_data(
         handle sctp, mb_media_type_t type, void *data, uint32_t data_len) {
+
+    uint32_t i, ppid;
+    sctp_dc_channel_t *channel;
+    struct sctp_sendv_spa spainfo;
+    sctp_dc_assoc_t *ctxt = (sctp_dc_assoc_t *)sctp;
+
+    switch(type) {
+
+        case MB_SCTP_STRING: ppid = WEBRTC_STRING; break;
+        case MB_SCTP_STRING_PARTIAL: ppid = WEBRTC_STRING_PARTIAL; break;
+        case MB_SCTP_STRING_EMPTY: ppid = WEBRTC_STRING_EMPTY; break;
+        case MB_SCTP_BINARY: ppid = WEBRTC_BINARY; break;
+        case MB_SCTP_BINARY_PARTIAL: ppid = WEBRTC_BINARY_PARTIAL; break;
+        case MB_SCTP_BINARY_EMPTY: ppid = WEBRTC_BINARY_EMPTY; break;
+
+        case MB_MEDIA_RTP:
+        case MB_MEDIA_RTCP:
+        default:
+            fprintf(stderr, "Invalid/Unknown sctp media "\
+                    "type %d received for sending to peer. Dropping!\n", type);
+            break;
+    }
+
+    /* find a channel to send data */
+    for (i = 0; i < SCTP_MAX_DATA_CHANNELS; i++)
+        if (ctxt->in_streams[i].state == DCEP_STREAM_OPEN) break;
+
+    if (i == SCTP_MAX_DATA_CHANNELS) {
+        fprintf(stderr, "Error! Not able to find any open channel to send data\n");
+        return MB_TRANSPORT_FAIL;
+    }
+
+    channel = &ctxt->channels[i];
+
+    memset(&spainfo, 0, sizeof(spainfo));
+
+    /* fill in the send info deatils as per rfc 6458 */
+    spainfo.sendv_flags = SCTP_SEND_SNDINFO_VALID;
+
+    spainfo.sendv_sndinfo.snd_sid = i;
+    spainfo.sendv_sndinfo.snd_flags = SCTP_EOR;
+	spainfo.sendv_sndinfo.snd_ppid = htonl(ppid);
+	//spainfo.sendv_sndinfo.snd_context = 
+	//spainfo.sendv_sndinfo.snd_assoc_id = 
+    switch(channel->channel_type) {
+
+        case DCEP_CHANNEL_RELIABLE_UNORDERED:
+        case DCEP_CHANNEL_PR_REXMIT_UNORDERED:
+        case DCEP_CHANNEL_PR_TIMED_UNORDERED:
+            spainfo.sendv_sndinfo.snd_flags |= SCTP_UNORDERED;
+            break;
+
+        default:
+            break;
+    }
+
+    if ((channel->channel_type == DCEP_CHANNEL_PR_REXMIT_UNORDERED) ||
+            (channel->channel_type == DCEP_CHANNEL_PR_REXMIT)) {
+
+        spainfo.sendv_flags |= SCTP_SEND_PRINFO_VALID;
+        spainfo.sendv_prinfo.pr_policy = SCTP_PR_SCTP_RTX;
+        spainfo.sendv_prinfo.pr_value = channel->reliability_param;
+    } else if ((channel->channel_type == DCEP_CHANNEL_PR_TIMED) ||
+            (channel->channel_type == DCEP_CHANNEL_PR_TIMED_UNORDERED)) {
+        spainfo.sendv_flags |= SCTP_SEND_PRINFO_VALID;
+        spainfo.sendv_prinfo.pr_policy = SCTP_PR_SCTP_TTL;
+        spainfo.sendv_prinfo.pr_value = channel->reliability_param;
+    }
+
+    if (usrsctp_sendv(ctxt->s, data, data_len, 
+                NULL, 0, &spainfo, sizeof(spainfo), SCTP_SENDV_SPA, 0) < 0) {
+
+        fprintf(stderr, "usrsctp_sendv: Sending of sctp app data failed\n");
+        return MB_TRANSPORT_FAIL;
+    }
 
     return MB_OK;
 }

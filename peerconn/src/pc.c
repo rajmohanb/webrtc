@@ -306,7 +306,7 @@ int pc_send_dtls_srtp_data (
                 "socket [%d] less than given size [%d]\n", bytes, len);
     }
 
-    fprintf(stderr, "[PC] Sent %d bytes of DTLS_SRTP data\n", bytes);
+    //fprintf(stderr, "[PC] Sent %d bytes of DTLS_SRTP data\n", bytes);
 #if 0
     inet_ntop(AF_INET, &(ctxt->peer_addr.sin_addr), dest_ipaddr, ICE_IP_ADDR_MAX_LEN);
 
@@ -617,7 +617,10 @@ mb_status_t pc_send_media_data(
         }
     } else {
 
-        /* TODO: sctp */
+        status = dc_sctp_send_media_data(ctxt->dc, type, media, len);
+        if (status != MB_OK) {
+            fprintf(stderr, "Error %d while sending sctp data\n", status);
+        }
     }
 
     return status;

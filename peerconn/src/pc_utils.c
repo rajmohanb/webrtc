@@ -286,9 +286,11 @@ mb_status_t pc_utils_verify_peer_fingerprint(pc_ctxt_t *ctxt) {
         return status;
     }
 
-    ctxt->state = PC_DC_IN_PROGRESS;
-
-    fprintf(stderr, "PC Session moved to PC_DC_IN_PROGRESS state\n");
+    ctxt->state = PC_ACTIVE;
+    /* TODO - Do we need the below state? */
+    //ctxt->state = PC_DC_IN_PROGRESS;
+    //fprintf(stderr, "PC Session moved to PC_DC_IN_PROGRESS state\n");
+    fprintf(stderr, "PC Session moved to PC_ACTIVE state\n");
 
     return MB_OK;
 

@@ -211,6 +211,9 @@ mb_status_t sctp_dcep_handle_data_channel_open(sctp_dc_assoc_t *ctxt,
         return status;
     }
 
+    /* TODO - can we conclude that the channel is now open? */
+    ctxt->in_streams[stream_id].state = DCEP_STREAM_OPEN;
+
     return status;
 }
 

@@ -70,7 +70,7 @@ typedef enum {
     WEBRTC_BINARY_PARTIAL = 52,
     WEBRTC_BINARY = 53,
     WEBRTC_STRING_PARTIAL = 54,
-    WEBTRC_STRING_EMPTY = 56,
+    WEBRTC_STRING_EMPTY = 56,
     WEBRTC_BINARY_EMPTY = 57,
 } sctp_ppid_type_t;
 
