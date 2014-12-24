@@ -83,6 +83,18 @@ typedef enum {
 } mb_transport_protocol_type_t;
 
 
+typedef enum {
+    MB_MEDIA_RTP,
+    MB_MEDIA_RTCP,
+    MB_SCTP_STRING,
+    MB_SCTP_STRING_PARTIAL,
+    MB_SCTP_STRING_EMPTY,
+    MB_SCTP_BINARY,
+    MB_SCTP_BINARY_PARTIAL,
+    MB_SCTP_BINARY_EMPTY,
+} mb_media_type_t;
+
+
 #define MB_IPADDR_MAX_LEN   46
 
 typedef struct 

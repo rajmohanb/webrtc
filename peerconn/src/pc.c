@@ -338,7 +338,6 @@ static void pc_dtls_incoming_app_data(
 
 int pc_send_sctp_data (handle sctp, char *buf, int len, handle app_handle) {
 
-    int i;
     mb_status_t status;
     pc_ctxt_t *ctxt = (pc_ctxt_t *) app_handle;
 
@@ -353,7 +352,22 @@ int pc_send_sctp_data (handle sctp, char *buf, int len, handle app_handle) {
 
 
 
-mb_status_t pc_init(pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb) {
+int pc_handle_peer_sctp_data(handle sctp, mb_media_type_t type, 
+                            void *data, uint32_t data_len, handle app_handle) {
+
+    pc_ctxt_t *ctxt = (pc_ctxt_t *) app_handle;
+
+    //fprintf(stderr, "PC: Received SCTP data from peer len %d:%s\n", data_len, (char *)data);
+    /* pass it to the higher application */
+    pc_media_cb(ctxt, ctxt->app_blob, type, data, data_len);
+
+    return 1;
+}
+
+
+
+mb_status_t pc_init(
+        pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb) {
 
     mb_status_t status;
     int32_t ice_status;
@@ -423,7 +437,7 @@ mb_status_t pc_init(pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb
     /* initialize the rtp stack */
 
     /* initialize the data channel (sctp) library */
-    status = dc_sctp_init(pc_send_sctp_data);
+    status = dc_sctp_init(pc_send_sctp_data, pc_handle_peer_sctp_data);
     if (status != MB_OK) {
         fprintf(stderr, "Data Channel SCTP module initialization failed\n");
         return status;
@@ -582,7 +596,8 @@ mb_status_t pc_inject_received_data(handle peerconn, pc_rcvd_data_t *data) {
     return pc_fsm_inject_msg(ctxt, PC_E_DATA, data, NULL);
 }
 
-mb_status_t pc_send_media_data(handle peerconn, uint8_t *media, uint32_t len) {
+mb_status_t pc_send_media_data(
+        handle peerconn, mb_media_type_t type, uint8_t *media, uint32_t len) {
 
     mb_status_t status;
     pc_ctxt_t *ctxt = (pc_ctxt_t *)peerconn;
@@ -594,9 +609,15 @@ mb_status_t pc_send_media_data(handle peerconn, uint8_t *media, uint32_t len) {
         return MB_INVALID_PARAMS;
     }
 
-    status = pc_utils_send_media_to_peer(ctxt, media, len);
-    if (status != MB_OK) {
-        fprintf(stderr, "Error %d while sending media data\n", status);
+    if ((type == MB_MEDIA_RTP) || (type == MB_MEDIA_RTCP)) {
+
+        status = pc_utils_send_media_to_peer(ctxt, media, len);
+        if (status != MB_OK) {
+            fprintf(stderr, "Error %d while sending media data\n", status);
+        }
+    } else {
+
+        /* TODO: sctp */
     }
 
     return status;
@@ -654,7 +675,10 @@ mb_status_t pc_request_intra_video_frame(
         handle peerconn, uint32_t our_ssrc, uint32_t peer_ssrc) {
 
     mb_status_t status;
-    uint32_t i, buf_len = 1500;
+    uint32_t buf_len = 1500;
+#if 0
+    uint32_t i;
+#endif
     uint8_t buf[1500];
     pc_ctxt_t *ctxt = (pc_ctxt_t *)peerconn;
 

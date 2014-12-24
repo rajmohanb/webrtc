@@ -38,6 +38,7 @@ extern "C" {
 
 
 static dc_sctp_send_data_cb sctp_out;
+static dc_sctp_recv_data_cb sctp_in;
 #ifdef MB_SCTP_DEBUG
 int debug_sock;
 #endif
@@ -85,7 +86,8 @@ static int mb_sctp_send_data(void *addr,
 }
 
 
-mb_status_t dc_sctp_init(dc_sctp_send_data_cb data_cb) {
+mb_status_t dc_sctp_init(
+        dc_sctp_send_data_cb data_cb, dc_sctp_recv_data_cb remote_data_cb) {
 
     usrsctp_init(0, mb_sctp_send_data, mb_sctp_debug_printf);
 
@@ -97,6 +99,7 @@ mb_status_t dc_sctp_init(dc_sctp_send_data_cb data_cb) {
     usrsctp_sysctl_set_sctp_ecn_enable(0);
 
     sctp_out = data_cb;
+    sctp_in = remote_data_cb;
 
 #ifdef MB_SCTP_DEBUG
     debug_sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -238,6 +241,7 @@ static int mb_sctp_handle_message(sctp_dc_assoc_t *ctxt,
                     void *data, size_t datalen, struct sctp_rcvinfo *rcv) {
 
     uint32_t ppid;
+    mb_media_type_t type;
 
 #if 0
 	uint16_t rcv_sid;
@@ -264,26 +268,51 @@ static int mb_sctp_handle_message(sctp_dc_assoc_t *ctxt,
 
         case WEBRTC_DCEP:
             sctp_dcep_handle_message(ctxt, data, datalen, rcv);
-        break;
+            return 1;
+            break;
+
         case WEBRTC_STRING:
-        break;
+            /* pass the data to application */
+            //fprintf(stderr, "Received WEBRTC STRING data of len %d: %s\n", datalen, (char *)data);
+            type = MB_SCTP_STRING;
+            break;
+
         case WEBRTC_BINARY_PARTIAL:
-        break;
+            fprintf(stderr, "Received WEBRTC BINARY PARTIAL data of len %d\n", datalen);
+            type = MB_SCTP_BINARY_PARTIAL;
+            break;
+
         case WEBRTC_BINARY:
-        break;
+            fprintf(stderr, "Received WEBRTC BINARY data of len %d\n", datalen);
+            type = MB_SCTP_BINARY;
+            break;
+
         case WEBRTC_STRING_PARTIAL:
-        break;
+            fprintf(stderr, "Received WEBRTC STRING PARTIAL data of len %d: %s\n", datalen, (char *)data);
+            type = MB_SCTP_STRING_PARTIAL;
+            break;
+
         case WEBTRC_STRING_EMPTY:
-        break;
+            fprintf(stderr, "Received WEBRTC EMPTY STRING data of len %d\n", datalen);
+            type = MB_SCTP_STRING_EMPTY;
+            break;
+
         case WEBRTC_BINARY_EMPTY:
-        break;
+            fprintf(stderr, "Received WEBRTC EMPTY BINARY data of len %d\n", datalen);
+            type = MB_SCTP_BINARY_EMPTY;
+            break;
+
         default:
-        /* 
-         * TODO - draft-ietf-rtcweb-data-channel-12 Section 6.6
-         * if an unsupported ppid is rcvd, the data channel should be closed.
-         */
-        break;
+            fprintf(stderr, "Received data of len %d for unknown PPID %d\n", datalen, ppid);
+            /* 
+             * TODO - draft-ietf-rtcweb-data-channel-12 Section 6.6
+             * if an unsupported ppid is rcvd, the data channel should be closed.
+             */
+            return 1;
+            break;
     }
+
+    sctp_in(ctxt, type, data, datalen, ctxt->app_handle);
 
     return 1;
 }
@@ -431,6 +460,14 @@ mb_status_t dc_sctp_association_inject_received_msg(
 #endif
 
     usrsctp_conninput(sctp, data, len, 0);
+
+    return MB_OK;
+}
+
+
+
+mb_status_t dc_sctp_send_media_data(
+        handle sctp, mb_media_type_t type, void *data, uint32_t data_len) {
 
     return MB_OK;
 }

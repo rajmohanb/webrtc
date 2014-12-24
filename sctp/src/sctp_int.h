@@ -149,6 +149,10 @@ void  mb_sctp_debug_packets(void *data, size_t datalen);
 #endif
 
 
+mb_status_t sctp_dcep_handle_message(sctp_dc_assoc_t *ctxt, 
+                void *data, size_t datalen, struct sctp_rcvinfo *rcv);
+
+
 /******************************************************************************/
 
 #ifdef __cplusplus

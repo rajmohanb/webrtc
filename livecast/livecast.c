@@ -821,13 +821,17 @@ mb_status_t rtcmedia_setup_timer_socket(void) {
 
 
 void pc_incoming_media(handle pc, 
-                handle app_handle, uint8_t *buf, uint32_t len) {
+        handle app_handle, mb_media_type_t type, uint8_t *buf, uint32_t len) {
 
     int32_t i;
     mb_status_t status;
     rtc_participant_t *r;
     rtc_participant_t *p = (rtc_participant_t *)app_handle;
     rtc_bcast_session_t *s = p->session;
+
+    if (type > MB_MEDIA_RTCP) {
+        fprintf(stderr, "Livecast: Received SCTP data of length %d\n", len);
+    }
 
     if (p->is_broadcaster == true)
         if (s->cur_rx_count == 0)
@@ -840,7 +844,7 @@ void pc_incoming_media(handle pc,
         //rtcp_rewrite_source_ssrc(buf, len, s->my_vid_ssrc1);
 
         /* rtcp data from receiver, lets send it to broadcaster!!! */
-        status = pc_send_media_data(s->tx.pc, buf, len);
+        status = pc_send_media_data(s->tx.pc, type, buf, len);
         if (status != MB_OK) {
             fprintf(stderr, "Sending of RTCP packet "\
                     "from receiver of len [%d] to broadcaster failed\n", len);
@@ -858,7 +862,7 @@ void pc_incoming_media(handle pc,
         r = &(s->rx[i]);
         if (!r->pc) continue;
 
-        status = pc_send_media_data(r->pc, buf, len);
+        status = pc_send_media_data(r->pc, type, buf, len);
         if (status != MB_OK) {
             fprintf(stderr, "Sending of broadcast media of len [%d] to receiver failed\n", len);
         } else {
@@ -886,6 +890,18 @@ int main(int argc, char **argv) {
     struct epoll_event event, *events;
     rtc_participant_t *p;
 
+#if 0
+    printf("Running as a daemon in the background\n");
+
+    /** daemonize */
+    if (daemon(0, 0) == -1)
+    {
+        printf("Could not be daemonized\n");
+        perror("Daemon: ");
+        exit(-1);
+    }
+#endif
+
     status = rtc_media_get_local_ip(g_local_ip, 48);
     if (status != MB_OK) {
         fprintf(stderr, "Error: Unable to determine local interface IP addr\n");
@@ -898,7 +914,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    printf("############ Signaling FD client: %d\n", g_sigfd);
+    fprintf(stderr, "############ Signaling FD client: %d\n", g_sigfd);
 
     g_epfd = epoll_create1(0);
     if (g_epfd == -1) {

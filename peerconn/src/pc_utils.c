@@ -303,6 +303,7 @@ mb_status_t pc_utils_process_srtp_packet(
     err_status_t err;
     int rtp_len = len;
     uint32_t pt;
+    mb_media_type_t type;
 
     //fprintf(stderr, "Before Unprotect: buf %p and len %d\n", buf, rtp_len);
     pt = (uint32_t) *(buf+1); 
@@ -317,6 +318,7 @@ mb_status_t pc_utils_process_srtp_packet(
                     err, *buf, pt, ctxt);
             return MB_INVALID_PARAMS;
         }
+        type = MB_MEDIA_RTCP;
 
         //fprintf(stderr, "RX RTCP Payload Type: %d Len: %d\n", pt, rtp_len);
     } else {
@@ -327,12 +329,13 @@ mb_status_t pc_utils_process_srtp_packet(
                     "Starting byte %d. Is it RTCP?\n", err, *buf);
             return MB_INVALID_PARAMS;
         }
+        type = MB_MEDIA_RTP;
     }
 
     //fprintf(stderr, "After Unprotect: buf %p and len %d\n", buf, rtp_len);
 
     /* hand over the clear rtp packets to application */
-    pc_media_cb(ctxt, ctxt->app_blob, buf, (uint32_t)rtp_len);
+    pc_media_cb(ctxt, ctxt->app_blob, type, buf, (uint32_t)rtp_len);
 
     return MB_OK;
 }
