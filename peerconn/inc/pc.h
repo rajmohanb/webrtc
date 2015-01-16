@@ -172,8 +172,8 @@ typedef struct
 
 typedef void (*pc_ice_candidates_cb) (
                 handle pc, handle app_handle, ice_cand_params_t *c);
-typedef void (*pc_ic_media_data_cb) (handle pc, 
-        handle app_handle, mb_media_type_t type, uint8_t *buf, uint32_t len);
+typedef void (*pc_ic_media_data_cb) (handle pc, handle app_handle, 
+                mb_media_type_t type, uint8_t *buf, uint32_t len, char *label);
 
 
 mb_status_t pc_init(pc_ice_candidates_cb ice_cb, pc_ic_media_data_cb ic_media_cb);
@@ -192,8 +192,8 @@ mb_status_t pc_set_remote_ice_candidate(handle peerconn, pc_ice_cand_t *cand);
 
 mb_status_t pc_inject_received_data(handle peerconn, pc_rcvd_data_t *data);
 
-mb_status_t pc_send_media_data(
-        handle peerconn, mb_media_type_t type, uint8_t *media, uint32_t len);
+mb_status_t pc_send_media_data(handle peerconn, 
+            mb_media_type_t type, uint8_t *media, uint32_t len, char *label);
 
 mb_status_t pc_deinit(void);
 

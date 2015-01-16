@@ -604,6 +604,7 @@ void rtcmedia_process_signaling_msg(int fd) {
 
         fprintf(stderr, "Signaling server has closed the connection\n");
         /* TODO; do we need to do something? remove fd from epoll */
+        exit(-1);
         return;
     }
 
@@ -820,8 +821,8 @@ mb_status_t rtcmedia_setup_timer_socket(void) {
 
 
 
-void pc_incoming_media(handle pc, 
-        handle app_handle, mb_media_type_t type, uint8_t *buf, uint32_t len) {
+void pc_incoming_media(handle pc, handle app_handle, 
+                mb_media_type_t type, uint8_t *buf, uint32_t len, char *label) {
 
     int32_t i;
     mb_status_t status;
@@ -844,7 +845,7 @@ void pc_incoming_media(handle pc,
         //rtcp_rewrite_source_ssrc(buf, len, s->my_vid_ssrc1);
 
         /* rtcp data from receiver, lets send it to broadcaster!!! */
-        status = pc_send_media_data(s->tx.pc, type, buf, len);
+        status = pc_send_media_data(s->tx.pc, type, buf, len, label);
         if (status != MB_OK) {
             fprintf(stderr, "Sending of RTCP packet "\
                     "from receiver of len [%d] to broadcaster failed\n", len);
@@ -862,7 +863,10 @@ void pc_incoming_media(handle pc,
         r = &(s->rx[i]);
         if (!r->pc) continue;
 
-        status = pc_send_media_data(r->pc, type, buf, len);
+        status = pc_send_media_data(r->pc, type, buf, len, label);
+        if (label) {
+            fprintf(stderr, "SCTP data with labe; [%s]\n", label);
+        }
         if (status != MB_OK) {
             fprintf(stderr, "Sending of broadcast media of len [%d] to receiver failed\n", len);
         } else {

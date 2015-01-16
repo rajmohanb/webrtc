@@ -353,13 +353,15 @@ int pc_send_sctp_data (handle sctp, char *buf, int len, handle app_handle) {
 
 
 int pc_handle_peer_sctp_data(handle sctp, mb_media_type_t type, 
-                            void *data, uint32_t data_len, handle app_handle) {
+                void *data, uint32_t data_len, char *label, handle app_handle) {
 
     pc_ctxt_t *ctxt = (pc_ctxt_t *) app_handle;
 
-    //fprintf(stderr, "PC: Received SCTP data from peer len %d:%s\n", data_len, (char *)data);
+    //fprintf(stderr, "PC: Received "
+        //"SCTP data from peer len %d:%s\n", data_len, (char *)data);
+
     /* pass it to the higher application */
-    pc_media_cb(ctxt, ctxt->app_blob, type, data, data_len);
+    pc_media_cb(ctxt, ctxt->app_blob, type, data, data_len, label);
 
     return 1;
 }
@@ -596,8 +598,8 @@ mb_status_t pc_inject_received_data(handle peerconn, pc_rcvd_data_t *data) {
     return pc_fsm_inject_msg(ctxt, PC_E_DATA, data, NULL);
 }
 
-mb_status_t pc_send_media_data(
-        handle peerconn, mb_media_type_t type, uint8_t *media, uint32_t len) {
+mb_status_t pc_send_media_data(handle peerconn, 
+        mb_media_type_t type, uint8_t *media, uint32_t len, char *label) {
 
     mb_status_t status;
     pc_ctxt_t *ctxt = (pc_ctxt_t *)peerconn;
@@ -617,7 +619,7 @@ mb_status_t pc_send_media_data(
         }
     } else {
 
-        status = dc_sctp_send_media_data(ctxt->dc, type, media, len);
+        status = dc_sctp_send_media_data(ctxt->dc, type, media, len, label);
         if (status != MB_OK) {
             fprintf(stderr, "Error %d while sending sctp data\n", status);
         }

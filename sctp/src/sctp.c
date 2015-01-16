@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                 Copyright (C) 2014, MindBricks Technologies                  *
+*                Copyright (C) 2014-15, MindBricks Technologies                *
 *                  Rajmohan Banavi (rajmohan@mindbricks.com)                   *
 *                     MindBricks Confidential Proprietary.                     *
 *                            All Rights Reserved.                              *
@@ -240,6 +240,7 @@ static void mb_sctp_handle_notification(
 static int mb_sctp_handle_message(sctp_dc_assoc_t *ctxt, 
                     void *data, size_t datalen, struct sctp_rcvinfo *rcv) {
 
+    char *label;
     uint32_t ppid;
     mb_media_type_t type;
 
@@ -312,7 +313,8 @@ static int mb_sctp_handle_message(sctp_dc_assoc_t *ctxt,
             break;
     }
 
-    sctp_in(ctxt, type, data, datalen, ctxt->app_handle);
+    label = ctxt->channels[rcv->rcv_sid].label;
+    sctp_in(ctxt, type, data, datalen, label, ctxt->app_handle);
 
     return 1;
 }
@@ -332,8 +334,6 @@ static int mb_sctp_receive_cb(struct socket *sock,
 			mb_sctp_handle_notification(ctxt, (union sctp_notification *)data, datalen);
 		} else {
             mb_sctp_handle_message(ctxt, data, datalen, &rcv);
-#if 0
-#endif
 		}
 		free(data);
 	}
@@ -466,8 +466,8 @@ mb_status_t dc_sctp_association_inject_received_msg(
 
 
 
-mb_status_t dc_sctp_send_media_data(
-        handle sctp, mb_media_type_t type, void *data, uint32_t data_len) {
+mb_status_t dc_sctp_send_media_data(handle sctp, 
+            mb_media_type_t type, void *data, uint32_t data_len, char *label) {
 
     uint32_t i, ppid;
     sctp_dc_channel_t *channel;
@@ -491,16 +491,31 @@ mb_status_t dc_sctp_send_media_data(
             break;
     }
 
+    /* TODO - 
+     * this way we will end up sending on the first channel always! Not fair. 
+     * Either pass channel id along with the data or use the label? 
+     */
+
     /* find a channel to send data */
     for (i = 0; i < SCTP_MAX_DATA_CHANNELS; i++)
-        if (ctxt->in_streams[i].state == DCEP_STREAM_OPEN) break;
+        if ((ctxt->channels[i].label) && 
+                (strncmp(label, ctxt->channels[i].label, strlen(label)) == 0))
+            break;
 
     if (i == SCTP_MAX_DATA_CHANNELS) {
-        fprintf(stderr, "Error! Not able to find any open channel to send data\n");
+        fprintf(stderr, "Error! Not able to "\
+                "find channel to send data for given label [%s]\n", label);
         return MB_TRANSPORT_FAIL;
     }
 
     channel = &ctxt->channels[i];
+
+    if (ctxt->in_streams[i].state != DCEP_STREAM_OPEN) {
+        fprintf(stderr, "Error! Found channel for given label [%s]. But "\
+                "it's state is %d and not OPEN as expected. Hence dropping "\
+                "sending of message\n", label, ctxt->in_streams[i].state);
+        return MB_TRANSPORT_FAIL;
+    }
 
     memset(&spainfo, 0, sizeof(spainfo));
 
