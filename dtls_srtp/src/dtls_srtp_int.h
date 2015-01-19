@@ -31,7 +31,7 @@ extern "C" {
 #define PC_DTLS_CIPHERS     "ALL:NULL:eNULL:aNULL"
 
 
-#define DTLS_RETX_TIMER_VAL 100 /* milliseconds */
+#define DTLS_RETX_TIMER_VAL 1000 /* milliseconds */
 
 
 typedef enum {
@@ -92,9 +92,6 @@ typedef struct {
     unsigned char peer_fp[EVP_MAX_MD_SIZE];
     uint32_t peer_fp_len;
 
-    /* retransmission for handshake */
-    char *sent_msg;
-    uint32_t sent_msg_len;
     handle timer_id;
 
     /* 

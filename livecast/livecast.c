@@ -830,9 +830,13 @@ void pc_incoming_media(handle pc, handle app_handle,
     rtc_participant_t *p = (rtc_participant_t *)app_handle;
     rtc_bcast_session_t *s = p->session;
 
+#if 0
+    //fprintf(stderr, "Received media packet of len %d from/to broadcaster\n", len);
+
     if (type > MB_MEDIA_RTCP) {
         fprintf(stderr, "Livecast: Received SCTP data of length %d\n", len);
     }
+#endif
 
     if (p->is_broadcaster == true)
         if (s->cur_rx_count == 0)
@@ -864,19 +868,24 @@ void pc_incoming_media(handle pc, handle app_handle,
         if (!r->pc) continue;
 
         status = pc_send_media_data(r->pc, type, buf, len, label);
+#if 0
         if (label) {
             fprintf(stderr, "SCTP data with labe; [%s]\n", label);
         }
+#endif
         if (status != MB_OK) {
-            fprintf(stderr, "Sending of broadcast media of len [%d] to receiver failed\n", len);
+            fprintf(stderr, "Sending of broadcast "\
+                    "media of len [%d] to receiver failed\n", len);
         } else {
             if (r->intra_frame_requested == false) {
-                status = pc_request_intra_video_frame(s->tx.pc, s->my_vid_ssrc1, s->tx_vid_ssrc1);
+                status = pc_request_intra_video_frame(
+                                s->tx.pc, s->my_vid_ssrc1, s->tx_vid_ssrc1);
                 if (status != MB_OK) {
                     fprintf(stderr, "Sending of FIR failed\n");
                 } else {
                     r->intra_frame_requested = true;
-                    fprintf(stderr, "Sent RTCP FIR request. Hope we see IDR frame!\n");
+                    fprintf(stderr, "Sent RTCP FIR "\
+                            "request. Hope we see IDR frame!\n");
                 }
             }
         }

@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                 Copyright (C) 2014, MindBricks Technologies                  *
+*               Copyright (C) 2014-15, MindBricks Technologies                 *
 *                  Rajmohan Banavi (rajmohan@mindbricks.com)                   *
 *                     MindBricks Confidential Proprietary.                     *
 *                            All Rights Reserved.                              *
@@ -52,6 +52,20 @@ extern "C" {
 dtls_srtp_instance_t g_dtls_srtp;
 
 
+uint32_t dtls_print_binary_buffer(
+        u_char *dest, uint32_t dest_len, u_char *src, uint32_t src_len)
+{
+    uint32_t i, bytes = 0;
+
+    fprintf(stderr, "0x");
+
+    for (i = 0; ((i < src_len) && (bytes <= dest_len)); i++)
+        fprintf(stderr, "%2.2X", *(src+i));
+
+    return bytes;
+}
+
+
 int pc_dtls_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) {
     fprintf(stderr, "pc_dtls_verify_callback\n");
     return 1;
@@ -63,43 +77,26 @@ void dtls_srtp_send_any_pending_data(dtls_srtp_session_t *s) {
 
     int sent, pending, buf_len;
     pending = BIO_ctrl_pending(s->sink_bio);
-    printf("SSL SINK BIO PENDING BYTES: %d\n", pending);
 
     if (pending) {
-        if (s->sent_msg) {
-            /* send(retransmit) before free? */
-            free(s->sent_msg);
-        }
 
-        s->sent_msg = calloc(1, pending);
-        s->sent_msg_len = pending;
-        buf_len = BIO_read(s->sink_bio, s->sent_msg, pending);
+        char msg[1500];
+    
+        printf("SSL SINK BIO PENDING BYTES: %d\n", pending);
 
-        sent = g_dtls_srtp.cb(s, s->sent_msg, buf_len, s->app_handle);
+        /* TODO: make sure pending > 1500 */
+
+        buf_len = BIO_read(s->sink_bio, msg, pending);
+        /* TODO - check return value? */
+
+        sent = g_dtls_srtp.cb(s, msg, buf_len, s->app_handle);
 
         if (sent < buf_len) {
             fprintf(stderr, "Error sending DTLS data. Sent "\
                     "only %d bytes against given %d bytes\n", sent, buf_len);
             /* TODO; what do we do now? error? */
         } else {
-            //fprintf(stderr, "Sent DTLS data of len %d\n", sent);
-        }
-
-        /* no retransmission for application data. Only for handshake! */
-        if (s->state != DTLS_SRTP_READY) {
-
-            /* 
-             * minimal retransmission support for dtls handshake 
-             * messages as per RFC 4347.
-             */
-            s->timer_id = g_dtls_srtp.timer_start_cb(DTLS_RETX_TIMER_VAL, s);
-            if (s->timer_id) {
-                fprintf(stderr, "Started DTLS retransmission "\
-                        "timer for %d duration\n", DTLS_RETX_TIMER_VAL);
-            } else {
-                fprintf(stderr, "Starting DTLS retransmission "\
-                        "timer for %d duration FAILED\n", DTLS_RETX_TIMER_VAL);
-            }
+            fprintf(stderr, "Sent DTLS data of len %d\n", sent);
         }
     }
 
@@ -158,6 +155,9 @@ mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb,
         fprintf(stderr, "Error while checking and validating of private key\n");
         goto PC_ERROR_EXIT2;
     }
+
+    /* fix for the latest Openssl lib, where dtls handshake does not complete */
+    SSL_CTX_set_read_ahead(g_dtls_srtp.ctx, 1);
 
     g_dtls_srtp.cert_bio = BIO_new(BIO_s_file());
     if (g_dtls_srtp.cert_bio == NULL) {
@@ -244,11 +244,13 @@ mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role,
     s->ssl = SSL_new(g_dtls_srtp.ctx);
     if (s->ssl == NULL) {
         fprintf(stderr, "Creation of new SSL structure for session failed\n");
+        free(s);
         return MB_INT_ERROR;
     }
 
     if (SSL_set_ex_data(s->ssl, 0, s) != 1) {
         fprintf(stderr, "Setting of app data to new SSL structure failed\n");
+        free(s);
         return MB_INT_ERROR;
     }
 
@@ -258,6 +260,7 @@ mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role,
     s->src_bio = BIO_new(BIO_s_mem());
     if (s->src_bio == NULL) {
         fprintf(stderr, "Creation of source BIO for session failed\n");
+        free(s);
         return MB_INT_ERROR;
     }
     BIO_set_mem_eof_return(s->src_bio, -1);
@@ -265,6 +268,7 @@ mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role,
     s->sink_bio = BIO_new(BIO_s_mem());
     if (s->sink_bio == NULL) {
         fprintf(stderr, "Creation of sink BIO for session failed\n");
+        free(s);
         return MB_INT_ERROR;
     }
     BIO_set_mem_eof_return(s->sink_bio, -1);
@@ -279,6 +283,21 @@ mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role,
         SSL_set_accept_state(s->ssl);
         printf("SSL session role: Accept role\n");
     }
+
+    /* https://code.google.com/p/chromium/issues/detail?id=406458 
+     * Specify an ECDH group for ECDHE ciphers, otherwise they cannot be
+     * negotiated when acting as the server. Use NIST's P-256 which is
+     * commonly supported.
+     */
+    EC_KEY* ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    if(ecdh == NULL) {
+        fprintf(stderr, "DTLS: Error creating ECDH group\n");
+        free(s);
+        return MB_INT_ERROR;
+    }
+    SSL_set_options(s->ssl, SSL_OP_SINGLE_ECDH_USE);
+    SSL_set_tmp_ecdh(s->ssl, ecdh);
+    EC_KEY_free(ecdh);
 
     s->app_handle = app_handle;
     s->digest_type = type;
@@ -297,6 +316,8 @@ mb_status_t dtls_srtp_create_session(dtls_setup_role_type_t role,
 mb_status_t dtls_srtp_session_do_handshake(handle h_dtls) {
 
     int ret;
+    uint64_t retx_val;
+    struct timeval timeout;
     dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
 
     ret = SSL_do_handshake(s->ssl);
@@ -358,6 +379,21 @@ mb_status_t dtls_srtp_session_do_handshake(handle h_dtls) {
 
     dtls_srtp_send_any_pending_data(s);
 
+    /* start re-transmission timer */
+    DTLSv1_get_timeout(s->ssl, &timeout);
+    /* TODO: check return value */
+
+    retx_val = timeout.tv_sec * 1000 + (timeout.tv_usec/1000);
+
+    s->timer_id = g_dtls_srtp.timer_start_cb(retx_val, s);
+    if (s->timer_id) {
+        fprintf(stderr, "Started DTLS retransmission "\
+                "timer for %d duration\n", DTLS_RETX_TIMER_VAL);
+    } else {
+        fprintf(stderr, "Starting DTLS retransmission "\
+                "timer for %d duration FAILED\n", DTLS_RETX_TIMER_VAL);
+    }
+
     s->state = DTLS_SRTP_HANDSHAKING;
 
     return MB_OK;
@@ -371,86 +407,151 @@ mb_status_t dtls_srtp_session_inject_data(handle h_dtls,
     int written;
     X509 *peer_cert;
     dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
+    //u_char bin_buf[1000];
+    int bytes;
+    char *appdata = (char *) calloc(1, 1500);
+    if (appdata == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return MB_MEM_ERROR;
+    }
 
     *is_handshake_done = 0;
 
     fprintf(stderr, "received dtls data from remote of len [%d]\n", len);
 
+    dtls_srtp_send_any_pending_data(s);
+
     written = BIO_write(s->src_bio, data, len);
-    if (written) {
-        if (s->state == DTLS_SRTP_HANDSHAKING) {
-            if (!SSL_is_init_finished(s->ssl)) {
-
-                printf("&&&&&&&&&&&&&& SSL handshake NOT yet complete &&&&&&&&&&&&&&&&&&&\n");
-                SSL_do_handshake(s->ssl); /* TODO; check return value? */
-            }
-
-            /*
-             * Damn! The reason why the SSL was not returning as complete
-             * was because we need to check the status even after every
-             * call to SSL_do_handshake(). Costed me 2-3 days!
-             */
-            if (SSL_is_init_finished(s->ssl)) {
-
-                EVP_MD *tmp_d;
-                unsigned int i;
-
-                printf("********** HANDSHAKE DONE **************\n");
-
-                /* check the peer certificate */
-                peer_cert = SSL_get_peer_certificate(s->ssl);
-                if (peer_cert == NULL) {
-                    fprintf(stderr, "DTLS Handshake "\
-                            "completed. Peer certificate missing\n");
-                    return MB_INVALID_PARAMS;
-                }
-
-                if (s->digest_type == DTLS_SHA1) {
-                    tmp_d = EVP_sha1();
-                    fprintf(stderr, "[DTLS]: Peer Digest type: SHA1\n");
-                } else if (s->digest_type == DTLS_SHA256) {
-                    tmp_d = EVP_sha256();
-                    fprintf(stderr, "[DTLS]: Peer Digest type: SHA256\n");
-                } else {
-                    fprintf(stderr, "[DTLS]: Unsupported Digest type\n");
-                    return MB_NOT_SUPPORTED;
-                }
-
-                X509_digest(peer_cert, tmp_d, s->peer_fp, &s->peer_fp_len);
-
-                printf("PEER CERTIFICATE [Len=%d] FINGERPRINT: ", s->peer_fp_len);
-
-                for (i = 0; i < s->peer_fp_len; i++) {
-                    printf("%02X:", s->peer_fp[i]);
-                }
-                printf("\n");
-
-                s->state = DTLS_SRTP_READY;
-                *is_handshake_done = 1;
-            }
-        } else {
-            /* TODO; we are ready, so these must be higher application data */
-            int bytes;
-            char *appdata = (char *) calloc(1, 1500);
-            if (appdata == NULL) {
-                fprintf(stderr, "Memory allocation failed\n");
-                return MB_MEM_ERROR;
-            }
-
-            bytes = SSL_read(s->ssl, appdata, 1500);
-
-            //fprintf(stderr, "Incoming => Number of bytes of Application data: %d\n", bytes);
-
-            /* pass to the application for further processing */
-            g_dtls_srtp.app_cb(s, appdata, bytes, s->app_handle);
-
-            /* Freeing of appdata memory is application responsibility */
-        }
-    } else {
-        printf("BIO_write() returned error\n");
+    if (written <= 0) {
+        fprintf(stderr, "BIO_write() returned error: %d\n", written);
+        return MB_INT_ERROR;
     }
 
     dtls_srtp_send_any_pending_data(s);
+
+    //dtls_print_binary_buffer(bin_buf, 1000, data, len);
+
+    bytes = SSL_read(s->ssl, appdata, 1500);
+    fprintf(stderr, "SSL_read() returned %d bytes\n", bytes);
+
+    if (bytes == 0) {
+        /* TODO */
+    } else if (bytes < 0) {
+
+        int err = SSL_get_error(s->ssl, bytes);
+        printf("[%d] SSL_do_handshake: %d\n", bytes, err);
+        switch(err) {
+            case SSL_ERROR_NONE:
+                printf("SSL_ERROR_NONE\n");
+                break;
+            case SSL_ERROR_ZERO_RETURN:
+                printf("SSL_ERROR_ZERO_RETURN\n");
+                break;
+            case SSL_ERROR_WANT_READ:
+                printf("SSL_ERROR_WANT_READ\n");
+                break;
+            case SSL_ERROR_WANT_WRITE:
+                printf("SSL_ERROR_WANT_WRITE\n");
+                break;
+            case SSL_ERROR_WANT_CONNECT:
+                printf("SSL_ERROR_WANT_CONNECT\n");
+                break;
+            case SSL_ERROR_WANT_ACCEPT:
+                printf("SSL_ERROR_WANT_ACCEPT\n");
+                break;
+            case SSL_ERROR_WANT_X509_LOOKUP:
+                printf("SSL_ERROR_WANT_X509_LOOKUP\n");
+                break;
+            case SSL_ERROR_SYSCALL:
+                printf("SSL_ERROR_SYSCALL\n");
+                break;
+            case SSL_ERROR_SSL:
+                printf("SSL_ERROR_SSL\n");
+                break;
+            default:
+                printf("SOME other SSL error\n");
+                break;
+        }
+
+        if (err != SSL_ERROR_SSL) {
+
+#if 0
+            if (ERR_get_error() == 0) {
+                perror("SSL_do_handshake ");
+                printf("OpenSSL Error Queue is empty. Ret = %d\n", bytes);
+            } else {
+                ERR_print_errors_fp(stderr);
+            }
+
+            printf("==========================================================\n");
+            printf("SSL ERROR: %s\n", ERR_error_string(err, NULL));
+            printf("           %s\n", ERR_lib_error_string(err));
+            printf("           %s\n", ERR_func_error_string(err));
+            printf("           %s\n", ERR_reason_error_string(err));
+            printf("==========================================================\n");
+#endif
+
+        } else {
+            
+            free(appdata);
+            return MB_INT_ERROR;
+        }
+    }
+
+    dtls_srtp_send_any_pending_data(s);
+
+    if (s->state == DTLS_SRTP_HANDSHAKING) {
+
+        if (SSL_is_init_finished(s->ssl)) {
+
+            EVP_MD *tmp_d;
+            unsigned int i;
+
+            printf("********** HANDSHAKE DONE **************\n");
+
+            /* check the peer certificate */
+            peer_cert = SSL_get_peer_certificate(s->ssl);
+            if (peer_cert == NULL) {
+                fprintf(stderr, "DTLS Handshake "\
+                        "completed. Peer certificate missing\n");
+                return MB_INVALID_PARAMS;
+            }
+
+            if (s->digest_type == DTLS_SHA1) {
+                tmp_d = EVP_sha1();
+                fprintf(stderr, "[DTLS]: Peer Digest type: SHA1\n");
+            } else if (s->digest_type == DTLS_SHA256) {
+                tmp_d = EVP_sha256();
+                fprintf(stderr, "[DTLS]: Peer Digest type: SHA256\n");
+            } else {
+                fprintf(stderr, "[DTLS]: Unsupported Digest type\n");
+                return MB_NOT_SUPPORTED;
+            }
+
+            X509_digest(peer_cert, tmp_d, s->peer_fp, &s->peer_fp_len);
+
+            printf("PEER CERTIFICATE [Len=%d] FINGERPRINT: ", s->peer_fp_len);
+
+            for (i = 0; i < s->peer_fp_len; i++) {
+                printf("%02X:", s->peer_fp[i]);
+            }
+            printf("\n");
+
+            s->state = DTLS_SRTP_READY;
+            *is_handshake_done = 1;
+        }
+
+        free(appdata);
+    } else {
+
+        /* we are ready, so these must be higher application data */
+        fprintf(stderr, "Incoming => Number of bytes of Application data: %d\n", bytes);
+
+        /* pass to the application for further processing */
+        g_dtls_srtp.app_cb(s, appdata, bytes, s->app_handle);
+
+        /* Freeing of appdata memory is application responsibility */
+    }
 
     return MB_OK;
 }
@@ -505,7 +606,8 @@ mb_status_t dtls_srtp_session_get_keying_material(
 
 mb_status_t dtls_srtp_inject_timer_event(handle timer_id, handle arg) {
 
-    int sent;
+    uint64_t retx_val;
+    struct timeval timeout;
     dtls_srtp_session_t *s = (dtls_srtp_session_t *)arg;
 
     if (s->timer_id != timer_id) {
@@ -525,25 +627,30 @@ mb_status_t dtls_srtp_inject_timer_event(handle timer_id, handle arg) {
         fprintf(stderr, "The DTLS session has moved to READY state, hence "\
                 "ignoring any further retransmission. And ignoring current "\
                 "timer expiry event with handle %p\n", timer_id);
+        s->timer_id = NULL;
         return MB_OK;
     }
 
-    /* resend the last sent message and restart timer */
-    sent = g_dtls_srtp.cb(s, s->sent_msg, s->sent_msg_len, s->app_handle);
+    DTLSv1_get_timeout(s->ssl, &timeout);
+    retx_val = timeout.tv_sec * 1000 + (timeout.tv_usec/1000);
 
-    if (sent < s->sent_msg_len) {
-        fprintf(stderr, "Error Re-transmitting DTLS data. Sent only "\
-                "%d bytes against given %d bytes\n", sent, s->sent_msg_len);
-        /* TODO; what do we do now? error? */
+    if (retx_val == 0) {
+
+        fprintf(stderr, "Retransmission timer expired, re-transmitting\n");
+        DTLSv1_handle_timeout(s->ssl);
+        dtls_srtp_send_any_pending_data(s);
+
+        DTLSv1_get_timeout(s->ssl, &timeout);
+        retx_val = timeout.tv_sec * 1000 + (timeout.tv_usec/1000);
     }
 
-    s->timer_id = g_dtls_srtp.timer_start_cb(DTLS_RETX_TIMER_VAL, s);
+    s->timer_id = g_dtls_srtp.timer_start_cb(retx_val, s);
     if (s->timer_id) {
-        fprintf(stderr, "Started DTLS retransmission "\
-                "timer for %d duration\n", DTLS_RETX_TIMER_VAL);
+        fprintf(stderr, "Started DTLS retransmission timer for %lld "\
+                "duration. ID %d\n", retx_val, (int) s->timer_id);
     } else {
         fprintf(stderr, "Starting DTLS retransmission "\
-                    "timer for %d duration FAILED\n", DTLS_RETX_TIMER_VAL);
+                    "timer for %lld duration FAILED\n", retx_val);
     }
 
     return MB_OK;
@@ -576,37 +683,48 @@ mb_status_t dtls_srtp_session_send_app_data(
     ret = SSL_write(s->ssl, data, len);
     if (ret <= 0) {
         int what = SSL_get_error(s->ssl, ret);
-        printf("[%d] SSL_write: %d\n", ret, what);
+        fprintf(stderr, "[%d] SSL_write: %d\n", ret, what);
+
+        /* description on return values - http://sctp.fh-muenster.de/DTLS.pdf */
         switch(what) {
             case SSL_ERROR_NONE:
-                printf("SSL_ERROR_NONE\n");
+                /* we should never be ending up here!!! */
+                fprintf(stderr, "SSL_ERROR_NONE\n");
                 break;
             case SSL_ERROR_ZERO_RETURN:
-                printf("SSL_ERROR_ZERO_RETURN\n");
+                /* Transport connection closed */
+                fprintf(stderr, "SSL_ERROR_ZERO_RETURN\n");
                 break;
             case SSL_ERROR_WANT_READ:
-                printf("SSL_ERROR_WANT_READ\n");
+                /* Reading had to be interrupted, just try again */
+                fprintf(stderr, "SSL_ERROR_WANT_READ\n");
                 break;
             case SSL_ERROR_WANT_WRITE:
-                printf("SSL_ERROR_WANT_WRITE\n");
+                /* Writing had to be interrupted, just try again */
+                fprintf(stderr, "SSL_ERROR_WANT_WRITE\n");
                 break;
             case SSL_ERROR_WANT_CONNECT:
-                printf("SSL_ERROR_WANT_CONNECT\n");
+                /* Connecting had to be interrupted, just try again */
+                fprintf(stderr, "SSL_ERROR_WANT_CONNECT\n");
                 break;
             case SSL_ERROR_WANT_ACCEPT:
-                printf("SSL_ERROR_WANT_ACCEPT\n");
+                /* Accepting had to be interrupted, just try again */
+                fprintf(stderr, "SSL_ERROR_WANT_ACCEPT\n");
                 break;
             case SSL_ERROR_WANT_X509_LOOKUP:
-                printf("SSL_ERROR_WANT_X509_LOOKUP\n");
+                /* interrupt for certificate lookup. Try again */
+                fprintf(stderr, "SSL_ERROR_WANT_X509_LOOKUP\n");
                 break;
             case SSL_ERROR_SYSCALL:
-                printf("SSL_ERROR_SYSCALL\n");
+                /* socket error */
+                fprintf(stderr, "SSL_ERROR_SYSCALL\n");
                 break;
             case SSL_ERROR_SSL:
-                printf("SSL_ERROR_SSL\n");
+                /* socket protocol error, connection failed */
+                fprintf(stderr, "SSL_ERROR_SSL\n");
                 break;
             default:
-                printf("SOME other SSL error\n");
+                fprintf(stderr, "SOME other SSL error\n");
                 break;
         }
 
