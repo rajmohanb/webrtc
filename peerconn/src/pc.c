@@ -341,6 +341,8 @@ int pc_send_sctp_data (handle sctp, char *buf, int len, handle app_handle) {
     mb_status_t status;
     pc_ctxt_t *ctxt = (pc_ctxt_t *) app_handle;
 
+    if (ctxt->state != PC_ACTIVE) return 0;
+
     status = dtls_srtp_session_send_app_data(ctxt->dtls, (uint8_t *)buf, len);
     if (status != MB_OK) {
         fprintf(stderr, "Failed to send SCTP data\n");
@@ -492,7 +494,7 @@ mb_status_t pc_create_session(handle app_handle, handle *peerconn) {
     int32_t ice_status;
     ice_stun_server_cfg_t stun_cfg;
     ice_relay_server_cfg_t turn_cfg;
-    pc_ctxt_t *ctxt = (pc_ctxt_t *) malloc(sizeof(pc_ctxt_t));
+    pc_ctxt_t *ctxt = (pc_ctxt_t *) calloc(1, sizeof(pc_ctxt_t));
     if (ctxt == NULL) {
         return MB_MEM_ERROR;
     }
@@ -556,10 +558,45 @@ MB_ERROR_1:
 
 mb_status_t pc_destroy_session(handle peerconn) {
 
+    mb_status_t status;
+    err_status_t err;
     pc_ctxt_t *ctxt = (pc_ctxt_t *) peerconn;
 
-    if (ctxt->ice_session) ice_destroy_session(
-                        g_pc.ice_instance, ctxt->ice_session);
+    /* close sctp session */
+    if (ctxt->dc) {
+        status = dc_sctp_destroy_association(ctxt->dc);
+        if (status != MB_OK) {
+            fprintf(stderr, "Destroying of SCTP data "\
+                    "channel association failed. Error: %d\n", status);
+        }
+    }
+
+    /* close srtp session */
+    err = srtp_dealloc(ctxt->srtp_in);
+    if (err != err_status_ok) {
+        fprintf(stderr, 
+                "Deallocation of inbound srtp session failed: %d\n", err);
+    }
+
+    err = srtp_dealloc(ctxt->srtp_ob);
+    if (err != err_status_ok) {
+        fprintf(stderr, 
+                "Deallocation of outbound srtp session failed: %d\n", err);
+    }
+
+    /* TODO: close dtls session */
+    if (ctxt->dtls) {
+        status = dtls_srtp_destroy_session(ctxt->dtls);
+        if (status != MB_OK) {
+            fprintf(stderr, 
+                    "Destroying of DTLS session failed. Error: %d\n", status);
+        }
+    }
+
+    ctxt->state = PC_DEAD;
+
+    if (ctxt->ice_session)
+        ice_destroy_session(g_pc.ice_instance, ctxt->ice_session);
 
     free(ctxt);
 

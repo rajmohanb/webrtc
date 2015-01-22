@@ -566,6 +566,14 @@ mb_status_t dc_sctp_send_media_data(handle sctp,
 
 mb_status_t dc_sctp_destroy_association(handle sctp) {
 
+    sctp_dc_assoc_t *ctxt = (sctp_dc_assoc_t *)sctp;
+
+    usrsctp_deregister_address(ctxt);
+    usrsctp_shutdown(ctxt->s, SHUT_RDWR);
+    usrsctp_close(ctxt->s);
+
+    free(ctxt);
+
     return MB_OK;
 }
 

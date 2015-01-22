@@ -193,6 +193,11 @@ mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb,
         goto PC_ERROR_EXIT2;
     }
 
+    if (!BIO_free(g_dtls_srtp.cert_bio)) {
+        /* leak? */
+        fprintf(stderr, "Openssl BIO_free returned error\n");
+    }
+
     /* initialize the secure rtp stack */
     err = srtp_init();
     if (err) { 
@@ -660,12 +665,37 @@ mb_status_t dtls_srtp_inject_timer_event(handle timer_id, handle arg) {
 
 mb_status_t dtls_srtp_destroy_session(handle h_dtls) {
 
+    dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
+
+    /* are the source and sink BIO's freed when SSL_free() is called? */
+#if 0
+    if (!BIO_free(s->src_bio)) {
+        fprintf(stderr, "BIO_free() failed for SOURCE_BIO\n");
+    }
+
+    if (!BIO_free(s->sink_bio)) {
+        fprintf(stderr, "BIO_free() failed for SINK_BIO\n");
+    }
+#endif
+
+    SSL_free(s->ssl);
+
+    free(s);
+
     return MB_OK;
 }
 
 
 
 mb_status_t dtls_srtp_deinit(void) {
+
+    SSL_CTX_free(g_dtls_srtp.ctx);
+
+    ERR_free_strings();
+    RAND_cleanup();
+    EVP_cleanup();
+
+    /* no api for de-initializing srtp? */
 
     return MB_OK;
 }
@@ -677,6 +707,8 @@ mb_status_t dtls_srtp_session_send_app_data(
 
     int ret;
     dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
+
+    if (!h_dtls) return MB_INVALID_PARAMS;
 
     if (s->state != DTLS_SRTP_READY) return MB_NOT_FOUND;
 
