@@ -555,7 +555,8 @@ mb_status_t dtls_srtp_session_inject_data(handle h_dtls,
         /* pass to the application for further processing */
         g_dtls_srtp.app_cb(s, appdata, bytes, s->app_handle);
 
-        /* Freeing of appdata memory is application responsibility */
+        /* free the memory */
+        free(appdata);
     }
 
     return MB_OK;

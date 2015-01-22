@@ -571,17 +571,20 @@ mb_status_t pc_destroy_session(handle peerconn) {
         }
     }
 
-    /* close srtp session */
-    err = srtp_dealloc(ctxt->srtp_in);
-    if (err != err_status_ok) {
-        fprintf(stderr, 
-                "Deallocation of inbound srtp session failed: %d\n", err);
-    }
+    if ((ctxt->state == PC_ACTIVE) || (ctxt->state == PC_DEAD)) {
 
-    err = srtp_dealloc(ctxt->srtp_ob);
-    if (err != err_status_ok) {
-        fprintf(stderr, 
-                "Deallocation of outbound srtp session failed: %d\n", err);
+        /* close srtp session */
+        err = srtp_dealloc(ctxt->srtp_in);
+        if (err != err_status_ok) {
+            fprintf(stderr, 
+                    "Deallocation of inbound srtp session failed: %d\n", err);
+        }
+
+        err = srtp_dealloc(ctxt->srtp_ob);
+        if (err != err_status_ok) {
+            fprintf(stderr, 
+                    "Deallocation of outbound srtp session failed: %d\n", err);
+        }
     }
 
     /* TODO: close dtls session */
