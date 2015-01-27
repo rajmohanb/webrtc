@@ -668,8 +668,8 @@ mb_status_t dtls_srtp_destroy_session(handle h_dtls) {
 
     dtls_srtp_session_t *s = (dtls_srtp_session_t *)h_dtls;
 
-    /* are the source and sink BIO's freed when SSL_free() is called? */
 #if 0
+    /* the source and sink BIO's are freed when SSL_free() is called */
     if (!BIO_free(s->src_bio)) {
         fprintf(stderr, "BIO_free() failed for SOURCE_BIO\n");
     }

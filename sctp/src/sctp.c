@@ -78,8 +78,18 @@ void  mb_sctp_debug_packets(void *data, size_t datalen) {
 static int mb_sctp_send_data(void *addr, 
         void *buffer, size_t length, uint8_t tos, uint8_t set_df) {
 
-    fprintf(stderr, "Need to send SCTP data of len: %d\n", length);
+    /* 
+     * if the sctp association is already destroyed, then the registered 
+     * address is made NULL. So in such cases silently ignore the data 
+     * send requests from the usrsctp library.
+     */
+    if (!addr) {
+        fprintf(stderr, "Ignoring sctp data "\
+                "send req for terminated sctp association: %d\n", length);
+        return 0;
+    }
 
+    fprintf(stderr, "Addr:[%p]. Need to send SCTP data of len: %d\n", addr, length);
     sctp_out(addr, buffer, length, ((sctp_dc_assoc_t *)addr)->app_handle);
 
     return 0;
@@ -243,17 +253,6 @@ static int mb_sctp_handle_message(sctp_dc_assoc_t *ctxt,
     char *label;
     uint32_t ppid;
     mb_media_type_t type;
-
-#if 0
-	uint16_t rcv_sid;
-	uint16_t rcv_ssn;
-	uint16_t rcv_flags;
-	uint32_t rcv_ppid;
-	uint32_t rcv_tsn;
-	uint32_t rcv_cumtsn;
-	uint32_t rcv_context;
-	sctp_assoc_t rcv_assoc_id;
-#endif
 
     ppid = ntohl(rcv->rcv_ppid);
 
@@ -567,9 +566,21 @@ mb_status_t dc_sctp_send_media_data(handle sctp,
 mb_status_t dc_sctp_destroy_association(handle sctp) {
 
     sctp_dc_assoc_t *ctxt = (sctp_dc_assoc_t *)sctp;
+    struct linger linger;
 
+    /* abort the association */
+    linger.l_onoff = 1;
+    linger.l_linger = 0;
+
+    if (usrsctp_setsockopt(ctxt->s, 
+                SOL_SOCKET, SO_LINGER, &linger, sizeof(struct linger)) != 0) {
+        perror("usrsctp_setsockopt ");
+        fprintf(stderr, 
+                "Error while setting SO_LINGER option for usrsctp socket\n");
+    }
+
+    usrsctp_set_ulpinfo(ctxt->s, NULL);
     usrsctp_deregister_address(ctxt);
-    usrsctp_shutdown(ctxt->s, SHUT_RDWR);
     usrsctp_close(ctxt->s);
 
     free(ctxt);
