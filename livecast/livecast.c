@@ -534,6 +534,7 @@ mb_status_t mb_create_send_answer(
         cmd = json_dumps(root, JSON_PRESERVE_ORDER);
         if (!cmd) {
             fprintf(stderr, "JSON encoding of message failed\n");
+            sdp_parser_free(parser);
             return MB_INT_ERROR;
         }
 
@@ -544,6 +545,7 @@ mb_status_t mb_create_send_answer(
         if (size == -1) {
             perror("send ");
             fprintf(stderr, "Error while sending answer to signaling server\n");
+            sdp_parser_free(parser);
             return MB_TRANSPORT_FAIL;
         }
 
@@ -554,9 +556,11 @@ mb_status_t mb_create_send_answer(
         printf("Sent Answer to Signaling of Size: %d\n", strlen(cmd));
     } else {
         fprintf(stderr, "Error while forming the SDP message\n");
+        sdp_parser_free(parser);
         return MB_INT_ERROR;
     }
 
+    sdp_parser_free(parser);
     return MB_OK;
 }
 
@@ -637,6 +641,7 @@ void rtcmedia_process_signaling_msg(int fd) {
         if (!json_is_string(event)) {
 
             fprintf(stderr, "error: eventName is not a string\n");
+            json_decref(root);
             return;
         }
 
@@ -665,6 +670,8 @@ void rtcmedia_process_signaling_msg(int fd) {
         }
 
     } while(count > (ptr-buf));
+
+    json_decref(root);
 
     return;
 }

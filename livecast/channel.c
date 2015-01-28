@@ -194,6 +194,8 @@ mb_status_t rtcmedia_process_offer(json_t *msg) {
     }
 #endif
 
+    su_home_unref(home);
+
     return MB_OK;
 }
 
