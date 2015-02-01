@@ -111,7 +111,6 @@ mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb,
 
     const EVP_MD *digest;
     unsigned int n, pos;
-    err_status_t err;
 
     /* initialize the openssl library for dtls */
     SSL_library_init();
@@ -196,13 +195,6 @@ mb_status_t dtls_srtp_init(dtls_srtp_data_send_cb cb,
     if (!BIO_free(g_dtls_srtp.cert_bio)) {
         /* leak? */
         fprintf(stderr, "Openssl BIO_free returned error\n");
-    }
-
-    /* initialize the secure rtp stack */
-    err = srtp_init();
-    if (err) { 
-        printf("error: srtp init failed with error code %d\n", err);
-        goto PC_ERROR_EXIT2;
     }
 
     g_dtls_srtp.cb = cb;

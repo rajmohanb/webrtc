@@ -20,6 +20,7 @@
 #include <openssl/ssl.h>
 
 /* srtp */
+#include <srtp/err.h>
 #include <srtp/srtp.h>
 
 /* ice */
@@ -375,6 +376,7 @@ mb_status_t pc_init(
 
     mb_status_t status;
     int32_t ice_status;
+    err_status_t err;
     ice_instance_callbacks_t pc_cbs;
     ice_state_event_handlers_t pc_event_hdlrs;
 
@@ -435,7 +437,14 @@ mb_status_t pc_init(
             pc_dtls_incoming_app_data, pc_dtls_start_timer, pc_stop_timer);
     if (status != MB_OK) {
         fprintf(stderr, "DTLS_SRTP module initialization failed\n");
-        return status;
+        goto PC_ERROR_EXIT1;
+    }
+
+    /* initialize the secure rtp stack */
+    err = srtp_init();
+    if (err) { 
+        printf("error: srtp init failed with error code %d\n", err);
+        goto PC_ERROR_EXIT2;
     }
 
     /* initialize the rtp stack */
@@ -444,7 +453,7 @@ mb_status_t pc_init(
     status = dc_sctp_init(pc_send_sctp_data, pc_handle_peer_sctp_data);
     if (status != MB_OK) {
         fprintf(stderr, "Data Channel SCTP module initialization failed\n");
-        return status;
+        goto PC_ERROR_EXIT3;
     }
 
     pc_ice_cb = ice_cb;
@@ -452,6 +461,10 @@ mb_status_t pc_init(
 
     return MB_OK;
 
+PC_ERROR_EXIT3:
+    /* no API to de-initialize srtp library? */
+PC_ERROR_EXIT2:
+    dtls_srtp_deinit();
 PC_ERROR_EXIT1:
     ice_destroy_instance(g_pc.ice_instance);
     return MB_INT_ERROR;
