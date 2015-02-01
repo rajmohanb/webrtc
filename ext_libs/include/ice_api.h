@@ -386,6 +386,8 @@ int32_t ice_session_send_media_data (handle h_inst, handle h_session,
 int32_t ice_session_restart_media_stream (handle h_inst,
                                 handle h_session, handle h_media);
 
+int32_t ice_session_dump_candidate_pairs(handle h_inst, handle h_session);
+
 
 
 /******************************************************************************/

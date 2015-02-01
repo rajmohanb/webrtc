@@ -274,6 +274,7 @@ static void pc_session_state_change_handler(handle h_inst,
 
         case ICE_CC_FAILED:
             printf("ICE session failed, destroying session\n");
+            ice_session_dump_candidate_pairs(h_inst, h_session);
             status = pc_fsm_inject_msg(ctxt, PC_E_ICE_FAILED, NULL, NULL);
             if (status != MB_OK) {
                 fprintf(stderr, "Processing of event PC_E_ICE_FAILED failed\n");
