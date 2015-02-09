@@ -42,7 +42,7 @@ static int g_sigfd, g_timerfd;
 int g_epfd;
 
 char g_local_ip[48] = {0};
-static mb_log_level_t g_log_sev = MBLOG_ERROR;
+static mb_log_level_t g_log_sev = MBLOG_WARNING;
 char cert_fp[] = "62:90:01:9c:2b:f3:1a:31:8b:f9:b9:7e:11:b3:41:77:e9:e2:46:8e:d5:8c:a4:a8:62:38:ef:38:e5:20:e5:fa";
 static char *log_levels[] =
 {
@@ -360,7 +360,7 @@ mb_status_t mb_create_send_answer(
 
 #if 1
     /* read sdp template from file */
-    read_sdp_from_file("mb_answer", sdp_buf, (int *)&sdpbuf_len);
+    read_sdp_from_file("/home/rajmohan/MindBricks/webrtc/livecast/mb_answer", sdp_buf, (int *)&sdpbuf_len);
     if (sdpbuf_len == 0) {
         printf("Error while reading SDP. Bailing out ...\n");
         return -1;

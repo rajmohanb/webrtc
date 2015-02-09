@@ -23,8 +23,8 @@ extern "C" {
 /******************************************************************************/
 
 
-#define PC_DTLS_CERT_FILE  "mycert.pem"
-#define PC_DTLS_KEY_FILE   "mycert.key"
+#define PC_DTLS_CERT_FILE  "/etc/ssl/certs/livecast.pem"
+#define PC_DTLS_KEY_FILE   "/etc/ssl/private/livecast.key"
 
 
 /* TODO; need to revisit */    
