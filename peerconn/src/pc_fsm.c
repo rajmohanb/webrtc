@@ -59,9 +59,20 @@ static char *pc_states[] = {
     "PC_BORN",
     "PC_ICE_IN_PROGRESS",
     "PC_DTLS_IN_PROGRESS",
+    "PC_DC_IN_PROGRESS",
     "PC_ACTIVE",
     "PC_DEAD",
 };
+
+static char *pc_events[] = {
+    "PC_E_LOCAL_MEDIA_PARAMS",
+    "PC_E_PEER_MEDIA_PARAMS",
+    "PC_E_DATA",
+    "PC_E_TRICKLED_ICE_CAND",
+    "PC_E_ICE_COMPLETED",
+    "PC_E_ICE_FAILED",
+};
+
 
 static pc_fsm_handler 
     pc_session_fsm[PC_STATE_MAX][PC_EVENT_MAX] =
@@ -280,6 +291,7 @@ static mb_status_t pc_data (pc_ctxt_t *ctxt, handle msg, handle param) {
     } else if ((byte == 0) || (byte == 1)) {
         status = pc_utils_process_ice_msg(ctxt, data);
     } else {
+        fprintf(stderr, "Invalid Data received\n");
         status = MB_INVALID_PARAMS;
     }
 
@@ -345,6 +357,11 @@ mb_status_t pc_fsm_inject_msg(pc_ctxt_t *ctxt,
 
     cur_state = ctxt->state;
     handler = pc_session_fsm[cur_state][event];
+
+#if 0
+    fprintf(stderr, "[PEERCONN SESSION FSM] Event:%s and State:%s\n", 
+                                    pc_events[event], pc_states[cur_state]);
+#endif
 
     if (!handler) return MB_INVALID_PARAMS;
 

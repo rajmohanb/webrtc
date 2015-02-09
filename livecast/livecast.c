@@ -42,7 +42,7 @@ static int g_sigfd, g_timerfd;
 int g_epfd;
 
 char g_local_ip[48] = {0};
-static mb_log_level_t g_log_sev = MBLOG_WARNING;
+static mb_log_level_t g_log_sev = MBLOG_ERROR;
 char cert_fp[] = "62:90:01:9c:2b:f3:1a:31:8b:f9:b9:7e:11:b3:41:77:e9:e2:46:8e:d5:8c:a4:a8:62:38:ef:38:e5:20:e5:fa";
 static char *log_levels[] =
 {
@@ -730,6 +730,11 @@ void rtcmedia_process_media_msg(rtc_participant_t *p) {
     inet_ntop(AF_INET, &recvaddr.sin_addr, 
             (char *)rx.src.ip_addr, (MB_IPADDR_MAX_LEN - 1));
     /* TODO; check return value of inet_ntop() */
+
+#if 0
+    fprintf(stderr, "Data received from %s:%d of len:%d\n", 
+                                rx.src.ip_addr, rx.src.port, bytes);
+#endif
 
     status = pc_inject_received_data(p->pc, &rx);
     if (status != MB_OK) {

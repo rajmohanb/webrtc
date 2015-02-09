@@ -23,10 +23,10 @@ extern "C" {
 /******************************************************************************/
 
 
-#define STUN_SERVER_IP      "74.125.200.127"
-#define STUN_SERVER_PORT    19302
-//#define STUN_SERVER_IP      "50.116.13.218"
-//#define STUN_SERVER_PORT    3478
+//#define STUN_SERVER_IP      "74.125.200.127"
+//#define STUN_SERVER_PORT    19302
+#define STUN_SERVER_IP      "50.116.13.218"
+#define STUN_SERVER_PORT    3478
 #define TURN_SERVER_IP      "50.116.13.218"
 #define TURN_SERVER_PORT    3478
 
