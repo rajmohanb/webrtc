@@ -25,6 +25,9 @@ extern "C" {
 
 #define MB_LIVECAST_MAX_RECEIVERS   10
 
+#define MB_FIR_REQ_FREQ_DURATION    15 /* seconds */
+
+
 typedef enum {
 
     LIVECAST_INIT,
@@ -46,6 +49,11 @@ typedef struct {
     pc_local_media_desc_t local_desc;
 
     void *session;
+
+    /* stats */
+    uint32_t rtp_count;
+    uint32_t rtcp_count;
+    uint32_t data_count;
 } rtc_participant_t;
 
 

@@ -1,3 +1,18 @@
+/*******************************************************************************
+*                                                                              *
+*                Copyright (C) 2014-15, MindBricks Technologies                *
+*                  Rajmohan Banavi (rajmohan@mindbricks.com)                   *
+*                     MindBricks Confidential Proprietary.                     *
+*                            All Rights Reserved.                              *
+*                                                                              *
+********************************************************************************
+*                                                                              *
+* This document contains information that is confidential and proprietary to   *
+* MindBricks Technologies. No part of this document may be reproduced in any   *
+* form whatsoever without prior written approval from MindBricks Technologies. *
+*                                                                              *
+*******************************************************************************/
+
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -842,19 +857,56 @@ void pc_incoming_media(handle pc, handle app_handle,
     rtc_participant_t *p = (rtc_participant_t *)app_handle;
     rtc_bcast_session_t *s = p->session;
 
+    /* 
+     * we need to start the periodic FIR request timer and for sending FIR we
+     * need to provide the local and remote ssrc values. These values are known
+     * after offer-answer exchange, but at application level we are not sure
+     * when this stage is reached. So here we wait for the first packet from 
+     * the broadcaster and then start the timer.
+     */
+    if ((p->rtp_count == 0) && (p->is_broadcaster == true)) {
+
+        fprintf(stderr, "Time to set FIR timer for %p. "\
+                "rtp:%d rtcp:%d data:%d\n", p->pc, p->rtp_count, 
+                p->rtcp_count, p->data_count);
+
+        if (p->pc != pc) {
+            fprintf(stderr, "GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOFY\n");
+        }
+
+        status = pc_set_intra_video_frame_request_frequency(p->pc, 
+                s->my_vid_ssrc1, s->tx_vid_ssrc1, MB_FIR_REQ_FREQ_DURATION);
+        if (status != MB_OK) {
+            fprintf(stderr, "Unable to set the periodic "\
+                    "FIR timer for %p. Error returned: %d\n", status);
+        }
+    }
+
+    if (type == MB_MEDIA_RTP)
+        p->rtp_count++;
+    else if (type == MB_MEDIA_RTCP)
+        p->rtcp_count++;
+    else
+        p->data_count++;
+
 #if 0
-    //fprintf(stderr, "Received media packet of len %d from/to broadcaster\n", len);
+    fprintf(stderr, "PC session %p => rtp: %d rtcp: %d and data: %d\n", 
+                                p, p->rtp_count, p->rtcp_count, p->data_count);
+#endif
+
+#if 0
+    fprintf(stderr, "Received media packet of len %d from/to broadcaster\n", len);
 
     if (type > MB_MEDIA_RTCP) {
         fprintf(stderr, "Livecast: Received SCTP data of length %d\n", len);
     }
 #endif
 
-    if (p->is_broadcaster == true)
+    if (p->is_broadcaster == true) {
         if (s->cur_rx_count == 0)
             return;
+    } else {
 
-    if (p->is_broadcaster == false) {
         if (!s->tx.pc) return;
 
         /* rewrite the ssrc before send? */
@@ -871,6 +923,7 @@ void pc_incoming_media(handle pc, handle app_handle,
         //rtcp_parse_packet(buf, len);
 
         //fprintf(stderr, "Sent RTCP packet of len %d to broadcaster\n", len);
+        return;
     }
 
     /* data from broadcaster, pipe it to the receiver peerconnections */

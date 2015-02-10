@@ -47,6 +47,7 @@ extern "C" {
 
 #define PC_ICE_TIMER            1
 #define PC_DTLS_TIMER           2
+#define PC_TIMER                3
 
 typedef struct
 {
@@ -201,6 +202,9 @@ mb_status_t pc_inject_timer_event(pc_timer_event_t *event);
 
 mb_status_t pc_request_intra_video_frame(
         handle peerconn, uint32_t our_ssrc, uint32_t peer_ssrc);
+
+mb_status_t pc_set_intra_video_frame_request_frequency(handle peerconn, 
+                    uint32_t our_ssrc, uint32_t peer_ssrc, uint32_t duration);
 
 
 /******************************************************************************/

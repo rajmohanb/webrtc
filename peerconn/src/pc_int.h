@@ -101,6 +101,12 @@ typedef struct {
     uint16_t local_port;
     uint16_t peer_port;
     handle dc;
+
+    /* fir timer - only used for broadcaster peerconnections */
+    uint32_t fir_duration;
+    handle fir_timer_id;
+    uint32_t local_ssrc;
+    uint32_t peer_ssrc;
 } pc_ctxt_t;
 
 
@@ -132,6 +138,8 @@ mb_status_t pc_utils_send_media_to_peer(
                 pc_ctxt_t *ctxt, uint8_t *media, uint32_t len);
 
 int pc_send_dtls_srtp_data (handle dtls, char *buf, int len, handle app_handle);
+
+handle pc_start_timer (uint32_t duration, handle arg);
 
 
 /******************************************************************************/

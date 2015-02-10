@@ -389,5 +389,30 @@ mb_status_t pc_utils_send_media_to_peer(
 }
 
 
+mb_status_t pc_utils_process_fir_timer(pc_ctxt_t *ctxt, handle timer_id) {
+
+    mb_status_t status;
+
+    /* send fir */ 
+    status = pc_request_intra_video_frame(
+                (handle)ctxt, ctxt->local_ssrc, ctxt->peer_ssrc);
+    if (status != MB_OK) {
+        fprintf(stderr, "Error while sending "\
+                "FIR RTCP frame. Error returned %d\n", status);
+    }
+
+    /* restart the timer */
+    ctxt->fir_timer_id = pc_start_timer(ctxt->fir_duration, (handle)ctxt);
+    if (ctxt->fir_timer_id == NULL) {
+        fprintf(stderr, "Unable to start periodic FIR request timer\n");
+        return MB_INT_ERROR;
+    }
+
+    fprintf(stderr, "Sent FIR REQUEST "\
+            "RTCP frame to Broadcaster. Timer id %p\n", ctxt->fir_timer_id);
+
+    return status;
+}
+
 
 /******************************************************************************/

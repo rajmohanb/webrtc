@@ -85,7 +85,7 @@ static int32_t pc_nwk_send_msg (u_char *buf, uint32_t buf_len,
 }
 
 
-static void pc_timer_expiry_cb (void *timer_id, void *arg)
+static void pc_ice_timer_expiry_cb (void *timer_id, void *arg)
 {
     static int32_t timer_fd = 0;
     pc_timer_event_t timer_event;
@@ -185,9 +185,58 @@ static void pc_dtls_timer_expiry_cb (void *timer_id, void *arg)
 }
 
 
-static handle pc_start_timer (uint32_t duration, handle arg)
+static void pc_timer_expiry_cb (void *timer_id, void *arg)
 {
-    timer_expiry_callback timer_cb = pc_timer_expiry_cb;
+    static int32_t timer_fd = 0;
+    pc_timer_event_t timer_event;
+    struct sockaddr_in dest;
+    uint32_t bytes;
+
+    platform_memset((char *) &dest, 0, sizeof(dest));
+
+    MB_LOG (MBLOG_DEBUG,
+            "[PC] in peerconn timer callback %d %p", timer_id, arg);
+
+    if (timer_fd == 0)
+    {
+        timer_fd = socket(AF_INET, SOCK_DGRAM, 0);
+        if(timer_fd == -1)
+        {
+            MB_LOG(MBLOG_CRITICAL, "[PC] Timer event socket creation failed");
+            return;
+        }
+    }
+
+    timer_event.timer_id = timer_id;
+    timer_event.arg = arg;
+    timer_event.timer_type = (uint8_t) PC_TIMER;
+
+
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(PC_TIMER_PORT);
+    bytes = inet_pton(AF_INET, "127.0.0.1", &dest.sin_addr);
+    if (bytes != 1) {
+        perror("inet_pton:");
+        MB_LOG (MBLOG_CRITICAL, 
+                "%s: inet_pton() failed %d\n", dest, bytes);
+        return;
+    }
+
+    bytes = sendto(timer_fd, (void *)&timer_event, 
+            sizeof(timer_event), 0, (struct sockaddr *)&dest, sizeof(dest));
+    if (bytes == -1)
+    {
+        perror("sendto:");
+        MB_LOG(MBLOG_ERROR, "[PC] Sending of timer expiry message failed\n");
+    }
+    
+    return;
+}
+
+
+static handle pc_ice_start_timer (uint32_t duration, handle arg)
+{
+    timer_expiry_callback timer_cb = pc_ice_timer_expiry_cb;
 
     return platform_start_timer(duration, timer_cb, arg);
 }
@@ -207,6 +256,14 @@ static handle pc_dtls_start_timer (uint32_t duration, handle arg)
     timer_expiry_callback timer_cb = pc_dtls_timer_expiry_cb;
 
     fprintf(stderr, "DTLS SRTP Timer started for arg [%p]\n", arg);
+
+    return platform_start_timer(duration, timer_cb, arg);
+}
+
+
+handle pc_start_timer (uint32_t duration, handle arg)
+{
+    timer_expiry_callback timer_cb = pc_timer_expiry_cb;
 
     return platform_start_timer(duration, timer_cb, arg);
 }
@@ -392,7 +449,7 @@ mb_status_t pc_init(
     }
 
     pc_cbs.nwk_cb = pc_nwk_send_msg;
-    pc_cbs.start_timer_cb = pc_start_timer;
+    pc_cbs.start_timer_cb = pc_ice_start_timer;
     pc_cbs.stop_timer_cb = pc_stop_timer;
     pc_cbs.app_data_cb = pc_rx_data;
 
@@ -615,6 +672,12 @@ mb_status_t pc_destroy_session(handle peerconn) {
     if (ctxt->ice_session)
         ice_destroy_session(g_pc.ice_instance, ctxt->ice_session);
 
+    /* stop the FIR timer */
+    if (ctxt->fir_timer_id)
+        if (pc_stop_timer(ctxt->fir_timer_id) != STUN_OK)
+            fprintf(stderr, "Stopping of FIR timer "\
+                    "with ID: %p FAILED\n", ctxt->fir_timer_id);
+
     free(ctxt);
 
     return MB_OK;
@@ -707,24 +770,26 @@ mb_status_t pc_inject_timer_event(pc_timer_event_t *event) {
 
         fprintf(stderr, "DTLS Timer fired. TimerID: %p and Arg:%p\n", 
                                             event->timer_id, event->arg);
-        status = dtls_srtp_inject_timer_event(event->timer_id, event->arg);
-        if (status != MB_OK) {
-            fprintf(stderr, "Error! DTLS timer event, returned %d\n", status);
+        mb_status = dtls_srtp_inject_timer_event(event->timer_id, event->arg);
+        if (mb_status != MB_OK) {
+            fprintf(stderr, "Error! DTLS timer event, returned %d\n", mb_status);
             mb_status = MB_INT_ERROR;
+        }
+    } else if (event->timer_type == PC_TIMER) {
+
+        fprintf(stderr, "This must be the "\
+                "periodic FIR request timer: %p\n", event->timer_id);
+        mb_status = 
+            pc_utils_process_fir_timer((pc_ctxt_t *)event->arg, event->timer_id);
+        if (mb_status != MB_OK) {
+            fprintf(stderr, "Processing of periodic "\
+                    "FIR timer failed. Error: %d\n", mb_status);
         }
     } else {
 
         fprintf(stderr, "Unknown timer type %d event fired\n", event->timer_type);
         mb_status = MB_INVALID_PARAMS;
     }
-
-    /*
-     * TODO: Really crude way of timer management. Currently we don't 
-     * differentiate between ice timers and dtls timers. So as of now handling
-     * in this way. If ICE reports that it is an invalid timer, then we pass it
-     * on to dtls!!!
-     */
-
 
     return mb_status;
 }
@@ -768,6 +833,27 @@ mb_status_t pc_request_intra_video_frame(
     }
 
     return status;
+}
+
+
+
+mb_status_t pc_set_intra_video_frame_request_frequency(handle peerconn, 
+                    uint32_t our_ssrc, uint32_t peer_ssrc, uint32_t duration) {
+
+    pc_ctxt_t *ctxt = (pc_ctxt_t *)peerconn;
+
+    ctxt->local_ssrc = our_ssrc;
+    ctxt->peer_ssrc = peer_ssrc;
+    ctxt->fir_duration = duration * 1000;
+    ctxt->fir_timer_id = pc_start_timer(ctxt->fir_duration, peerconn);
+    if (ctxt->fir_timer_id == NULL) {
+        fprintf(stderr, "Unable to start periodic FIR request timer\n");
+        return MB_INT_ERROR;
+    }
+
+    fprintf(stderr, "Periodic FIR request timer started: %p\n", ctxt->fir_timer_id);
+
+    return MB_OK;
 }
 
 
