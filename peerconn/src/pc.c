@@ -272,7 +272,7 @@ handle pc_start_timer (uint32_t duration, handle arg)
 static void pc_rx_data(handle h_inst, handle h_session, 
             handle h_media, uint32_t comp_id, void *data, uint32_t data_len)
 {
-    printf("Data returned for COMP ID: [%d] %s\n", comp_id, (char *)data);
+    printf("Data returned for COMP ID: [%d] of len %d\n", comp_id, data_len);
     return;
 }
 
@@ -322,6 +322,7 @@ static void pc_session_state_change_handler(handle h_inst,
 
         case ICE_CC_COMPLETED:
             printf("ICE negotiation completed, alert the local user\n");
+            ice_session_dump_candidate_pairs(h_inst, h_session);
             status = pc_fsm_inject_msg(ctxt, PC_E_ICE_COMPLETED, NULL, NULL);
             if (status != MB_OK) {
                 fprintf(stderr, 
@@ -645,16 +646,20 @@ mb_status_t pc_destroy_session(handle peerconn) {
     if ((ctxt->state == PC_ACTIVE) || (ctxt->state == PC_DEAD)) {
 
         /* close srtp session */
+        if (ctxt->srtp_in) {
         err = srtp_dealloc(ctxt->srtp_in);
-        if (err != err_status_ok) {
-            fprintf(stderr, 
+            if (err != err_status_ok) {
+                fprintf(stderr, 
                     "Deallocation of inbound srtp session failed: %d\n", err);
+            }
         }
 
+        if (ctxt->srtp_ob) {
         err = srtp_dealloc(ctxt->srtp_ob);
-        if (err != err_status_ok) {
-            fprintf(stderr, 
+            if (err != err_status_ok) {
+                fprintf(stderr, 
                     "Deallocation of outbound srtp session failed: %d\n", err);
+            }
         }
     }
 
