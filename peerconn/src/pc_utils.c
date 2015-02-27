@@ -393,6 +393,12 @@ mb_status_t pc_utils_process_fir_timer(pc_ctxt_t *ctxt, handle timer_id) {
 
     mb_status_t status;
 
+    if (ctxt->state != PC_ACTIVE) {
+        fprintf(stderr, "PeerConnection not in "\
+                "ACTIVE state. Hence ignoring FIR timer expiry event\n");
+        return MB_OK;
+    }
+
     /* send fir */ 
     status = pc_request_intra_video_frame(
                 (handle)ctxt, ctxt->local_ssrc, ctxt->peer_ssrc);
