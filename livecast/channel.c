@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include <sys/epoll.h>
+
 #include <sdp.h>
 
 #include <jansson.h>
@@ -16,6 +18,7 @@
 
 
 extern rtc_bcast_session_t g_session;
+extern int g_epfd;
 
 mb_status_t rtcmedia_process_new_channel_req(json_t *msg) {
 
@@ -410,10 +413,12 @@ mb_status_t rtcmedia_add_new_participant(json_t *msg) {
 mb_status_t rtcmedia_remove_participant(json_t *msg) {
 
     char *id;
+	int ret;
     json_t *data, *r_id;
     rtc_bcast_session_t *s = &g_session;
     rtc_participant_t *p;
     mb_status_t status;
+    struct epoll_event event;
 
     data = json_object_get(msg, "data");
     if (!json_is_object(data)) {
@@ -449,10 +454,29 @@ mb_status_t rtcmedia_remove_participant(json_t *msg) {
         }
     }
 
-    free(p->id);
-    memset(p, 0, sizeof(rtc_participant_t));
+	/* remove the sock fd of this participant from the epoll list */
+    if (p->fd) {
+        event.data.ptr = p;
+    	fprintf(stderr, "Removing RX from epoll CTL with data ptr %p\n", p);
+    	event.events = EPOLLIN; // | EPOLLET;
+    	ret = epoll_ctl(g_epfd, EPOLL_CTL_DEL, p->fd, &event);
+    	if (ret == -1) {
+        	perror("epoll_ctl DEL");
+        	fprintf(stderr, "EPOLL DEL operation returned error\n");
 
-    s->cur_rx_count -= 1;
+			/* falling thru, participant must be removed even during error? */
+    	}
+
+		/* close the socket */
+		close(p->fd);
+    }
+
+    free(p->id);
+
+    if(p->is_broadcaster == false)
+        s->cur_rx_count -= 1;
+
+    memset(p, 0, sizeof(rtc_participant_t));
 
     return MB_OK;
 }

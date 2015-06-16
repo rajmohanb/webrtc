@@ -731,6 +731,8 @@ void rtcmedia_process_media_msg(rtc_participant_t *p) {
     pc_rcvd_data_t rx;
     rtc_bcast_session_t *s = (rtc_bcast_session_t *) p->session;
 
+	if (!p->fd) return;
+
     addrlen = sizeof(recvaddr);
     bytes = recvfrom(p->fd, 
                 net_buf, 1500, 0, (struct sockaddr *)&recvaddr, &addrlen);
@@ -1039,6 +1041,12 @@ int main(int argc, char **argv) {
                 perror("EPOLL wait ");
                 fprintf(stderr, "EPOLL wait returned error\n");
             }
+            continue;
+        }
+
+        if (n == 0) {
+			perror("epoll_wait returned 0: ");
+			fprintf(stderr, "EPOLL wait returned 0 events? errno: %d\n", errno);
             continue;
         }
 
